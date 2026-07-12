@@ -1,12 +1,14 @@
 package com.abk.kernel.utils
 
 import androidx.annotation.Keep
+import com.abk.kernel.data.model.ROOT_PROFILE_FLAG_NO_NEW_PRIVS
 import com.abk.kernel.data.model.RootGrantProfile
 
 object AbkKsuNative {
     const val KERNEL_SU_DOMAIN = "u:r:ksu:s0"
     const val ROOT_UID = 0
     const val ROOT_GID = 0
+    const val FLAG_KSU_NO_NEW_PRIVS = ROOT_PROFILE_FLAG_NO_NEW_PRIVS
     private const val NON_ROOT_DEFAULT_PROFILE_KEY = "$"
     private const val NOBODY_UID = 9999
 
@@ -27,6 +29,7 @@ object AbkKsuNative {
     external fun getFullVersion(): String
     external fun getHookType(): String
     external fun getSuperuserCount(): Int
+    external fun getGrantedUids(): IntArray?
     external fun uidShouldUmount(uid: Int): Boolean
     external fun getAppProfile(key: String?, uid: Int): Profile?
     external fun setAppProfile(profile: Profile?): Boolean
@@ -83,6 +86,18 @@ object AbkKsuNative {
     }
 
     fun isUsableManager(): Boolean = status()?.isManager == true
+
+    fun grantedUids(): Set<Int> =
+        if (!hasNativeBridge()) {
+            emptySet()
+        } else {
+            runCatching {
+                getGrantedUids()
+                    ?.filter { it >= 0 }
+                    ?.toSet()
+                    .orEmpty()
+            }.getOrDefault(emptySet())
+        }
 
     fun readProfile(packageName: String, uid: Int): RootGrantProfile? {
         if (!hasNativeBridge() || packageName.isBlank()) return null
@@ -177,6 +192,7 @@ object AbkKsuNative {
         var capabilities: MutableList<Int> = mutableListOf(),
         var context: String = KERNEL_SU_DOMAIN,
         var namespace: Int = Namespace.INHERITED.ordinal,
+        var flags: Long = FLAG_KSU_NO_NEW_PRIVS,
         var nonRootUseDefault: Boolean = true,
         var umountModules: Boolean = true,
         var rules: String = ""
@@ -199,6 +215,7 @@ object AbkKsuNative {
             capabilities = profile.capabilities.toMutableList(),
             context = profile.context.ifBlank { KERNEL_SU_DOMAIN },
             namespace = profile.namespace,
+            flags = profile.flags,
             nonRootUseDefault = profile.nonRootUseDefault,
             umountModules = profile.umountModules,
             rules = profile.rules
@@ -219,6 +236,7 @@ private fun AbkKsuNative.Profile.toRootGrantProfile(): RootGrantProfile =
         capabilities = capabilities,
         context = context,
         namespace = namespace,
+        flags = flags,
         nonRootUseDefault = nonRootUseDefault,
         umountModules = umountModules,
         rules = rules

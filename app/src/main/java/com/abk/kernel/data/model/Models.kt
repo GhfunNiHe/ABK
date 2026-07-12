@@ -409,6 +409,32 @@ object CustomExternalModuleStage {
     }
 }
 
+object CustomKernelOptionMode {
+    const val ENABLED_Y = "enabled_y"
+    const val ENABLED_M = "enabled_m"
+    const val DISABLED = "disabled"
+    const val IGNORE = "ignore"
+    const val RAW = "raw"
+
+    val options = listOf(ENABLED_Y, ENABLED_M, DISABLED, IGNORE, RAW)
+
+    fun normalize(value: String?): String = when (value?.trim()?.lowercase()) {
+        ENABLED_Y, "y", "yes", "on", "enable", "enabled" -> ENABLED_Y
+        ENABLED_M, "m", "module", "mod" -> ENABLED_M
+        DISABLED, "n", "no", "off", "disable", "disabled", "not_set", "not-set" -> DISABLED
+        IGNORE, "skip", "unchanged", "keep" -> IGNORE
+        RAW, "value", "raw_value", "raw-value" -> RAW
+        else -> IGNORE
+    }
+}
+
+data class CustomKernelOption(
+    val symbol: String = "",
+    val mode: String = CustomKernelOptionMode.IGNORE,
+    val rawValue: String = "",
+    val source: String = ""
+)
+
 data class CustomExternalModule(
     val url: String = "",
     val stage: String = CustomExternalModuleStage.AFTER_PATCH,
@@ -597,6 +623,7 @@ data class KernelBuildConfig(
     val zramExtraAlgos: String = "",
     val kpmPassword: String = "",
     val virtualizationSupport: String = "off",
+    val customKernelOptions: List<CustomKernelOption> = emptyList(),
     val useCustomExternalModules: Boolean = false,
     val customExternalModules: List<CustomExternalModule> = emptyList(),
     val onePlusCpu: String = "sm8650",
@@ -719,8 +746,11 @@ data class RootGrantApp(
     val uid: Int = 0,
     val userName: String = "",
     val isSystemApp: Boolean = false,
-    val profile: RootGrantProfile = RootGrantProfile()
+    val profile: RootGrantProfile = RootGrantProfile(),
+    val profileLoaded: Boolean = false
 )
+
+const val ROOT_PROFILE_FLAG_NO_NEW_PRIVS: Long = 1L
 
 data class RootGrantProfile(
     val name: String = "",
@@ -734,9 +764,21 @@ data class RootGrantProfile(
     val capabilities: List<Int> = emptyList(),
     val context: String = "u:r:ksu:s0",
     val namespace: Int = 0,
+    val flags: Long = ROOT_PROFILE_FLAG_NO_NEW_PRIVS,
     val nonRootUseDefault: Boolean = true,
     val umountModules: Boolean = true,
     val rules: String = ""
+)
+
+data class RootGrantProfileRecoveryRecord(
+    val packageName: String = "",
+    val uid: Int = 0,
+    val label: String = ""
+)
+
+data class RootGrantRecoveryNotice(
+    val title: String = "",
+    val message: String = ""
 )
 
 data class BuildPlan(

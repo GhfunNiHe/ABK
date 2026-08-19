@@ -77,6 +77,9 @@ import com.abk.kernel.data.model.WorkflowRun
 import com.abk.kernel.data.model.isKernelBuild
 import com.abk.kernel.data.model.isManagerBuild
 import com.abk.kernel.data.model.isManagerDevBuild
+import com.abk.kernel.ui.blur.BlurScreenScaffold
+import com.abk.kernel.ui.blur.blurredCardBackground
+import com.abk.kernel.ui.blur.blurredCardSurfaceColor
 import com.abk.kernel.ui.components.AbkScreenHorizontalPadding
 import com.abk.kernel.ui.components.AbkSegmentedButtonOption
 import com.abk.kernel.ui.components.AbkSingleChoiceSegmentedButtonRow
@@ -1028,23 +1031,25 @@ fun BuildScreen(
 
     if (!state.isLoggedIn || state.forkRepo == null) {
         val needsLogin = !state.isLoggedIn
-        Scaffold(
+        BlurScreenScaffold(
+            blurConfig = state.blurConfig,
             containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
             topBar = {
                 ExpressiveTopBar(
                     title = stringResource(R.string.build_title),
-                    scrollBehavior = scrollBehavior
+                    scrollBehavior = scrollBehavior,
+                    enableBlur = state.blurEnabled
                 )
             }
-        ) { padding ->
+        ) { topBarHeight ->
             Column(
                 modifier = Modifier
-                    .padding(padding)
                     .fillMaxSize()
                     .padding(horizontal = AbkScreenHorizontalPadding)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                Spacer(Modifier.height(topBarHeight + 16.dp))
                 ExpressiveHeroCard(
                     title = stringResource(
                         if (needsLogin) {
@@ -1108,29 +1113,31 @@ fun BuildScreen(
             .fillMaxWidth()
             .height(maxHeight + childPageTopInset + childPageBottomInset)
             .offset(y = -childPageTopInset)
-        Scaffold(
+        BlurScreenScaffold(
+            blurConfig = state.blurConfig,
             containerColor = appPageBackgroundColor(uiSurfaceColor(MaterialTheme.colorScheme.surface)),
             topBar = {
                 ExpressiveTopBar(
                     title = stringResource(R.string.build_title),
-                    scrollBehavior = scrollBehavior
+                    scrollBehavior = scrollBehavior,
+                    enableBlur = state.blurEnabled
                 )
             }
-        ) { padding ->
+        ) { topBarHeight ->
             Column(
                 modifier = Modifier
-                    .padding(padding)
                     .fillMaxSize()
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = AbkScreenHorizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-            BuildPlanHero(
-                config,
-                recommended,
-                state.buildStatus
-            )
+                Spacer(Modifier.height(topBarHeight + 16.dp))
+                BuildPlanHero(
+                    config,
+                    recommended,
+                    state.buildStatus
+                )
 
             BuildPlanToolsCard(
                 plansCount = state.buildPlans.size,
@@ -1421,6 +1428,7 @@ fun BuildScreen(
                 if (isOnePlusBuild) {
                     val proxyAllowed = !config.onePlusCpu.startsWith("mt")
                     val onePlusSusfsSupported = KernelSupport.onePlusSusfsSupported(config.androidVersion, config.kernelVersion)
+                    val onePlusLz4kdSupported = KernelSupport.onePlusLz4kdSupported(config.kernelVersion)
                     SwitchRow(
                         stringResource(R.string.build_enable_susfs),
                         !config.cancelSusfs && onePlusSusfsSupported,
@@ -1438,8 +1446,19 @@ fun BuildScreen(
                     SwitchRow(stringResource(R.string.build_enable_kpm), config.useKpm, enabled = kpmSupported && !noRootScheme) {
                         vm.updateBuildConfig(KernelSupport.normalize(config.copy(useKpm = it)))
                     }
-                    SwitchRow(stringResource(R.string.build_oneplus_lz4kd), config.onePlusUseLz4kd) {
-                        vm.updateBuildConfig(config.copy(onePlusUseLz4kd = it))
+                    SwitchRow(
+                        stringResource(R.string.build_oneplus_lz4kd),
+                        config.onePlusUseLz4kd && onePlusLz4kdSupported,
+                        enabled = onePlusLz4kdSupported
+                    ) {
+                        vm.updateBuildConfig(KernelSupport.normalize(config.copy(onePlusUseLz4kd = it)))
+                    }
+                    if (!onePlusLz4kdSupported) {
+                        Text(
+                            text = stringResource(R.string.build_oneplus_lz4kd_unsupported),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     SwitchRow(stringResource(R.string.build_enable_bbg), config.useBbg) {
                         vm.updateBuildConfig(config.copy(useBbg = it))
@@ -1737,9 +1756,12 @@ fun BuildScreen(
                         }
 
                         state.customExternalModuleError?.let { err ->
+                            val shape = MaterialTheme.shapes.medium
                             Card(
+                                modifier = Modifier.blurredCardBackground(shape),
+                                shape = shape,
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer
+                                    containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.errorContainer)
                                 )
                             ) {
                                 Row(
@@ -1843,7 +1865,8 @@ fun BuildScreen(
                     backgroundUri = state.customBackgroundUri,
                     backgroundImageEnabled = state.backgroundImageEnabled
                 )
-                Scaffold(
+                BlurScreenScaffold(
+                    blurConfig = state.blurConfig,
                     containerColor = Color.Transparent,
                     topBar = {
                         ExpressiveTopBar(
@@ -1857,6 +1880,7 @@ fun BuildScreen(
                                     Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.build_back_to_config))
                                 }
                             },
+                            enableBlur = state.blurEnabled,
                             actions = {
                                 if (showKernelOptionsPage) {
                                     Box {
@@ -1908,9 +1932,10 @@ fun BuildScreen(
                             }
                         )
                     }
-                ) { padding ->
+                ) { topBarHeight ->
                     if (showBuildQueuePage) {
                         BuildQueuePage(
+                            topBarHeight = topBarHeight,
                             queue = state.buildQueue,
                             cancellingRunIds = state.cancellingWorkflowRunIds,
                             onApply = {
@@ -1922,13 +1947,11 @@ fun BuildScreen(
                             onRetry = { vm.retryBuildQueueItem(it.id) },
                             onCancelRun = { runId -> vm.cancelWorkflowRun(runId) },
                             onClearCompleted = vm::clearCompletedBuildQueueItems,
-                            modifier = Modifier
-                                .padding(padding)
-                                .fillMaxSize()
+                            modifier = Modifier.fillMaxSize()
                         )
                     } else if (showKernelOptionsPage) {
                         BuildKernelOptionsPage(
-                            padding = padding,
+                            topBarHeight = topBarHeight,
                             options = filteredKernelOptions,
                             summary = kernelOptionSummary,
                             searchQuery = kernelOptionSearchQuery,
@@ -1943,6 +1966,7 @@ fun BuildScreen(
                         )
                     } else {
                         BuildPlanLibraryPage(
+                            topBarHeight = topBarHeight,
                             plans = state.buildPlans,
                             onApply = {
                                 vm.applyBuildPlan(it)
@@ -1955,9 +1979,7 @@ fun BuildScreen(
                                 renamePlanName = it.name
                             },
                             onDelete = { deletePlanTarget = it },
-                            modifier = Modifier
-                                .padding(padding)
-                                .fillMaxSize()
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                 }
@@ -2245,6 +2267,7 @@ private fun ShareBuildPlanScopeDialog(
 
 @Composable
 private fun BuildPlanLibraryPage(
+    topBarHeight: Dp,
     plans: List<BuildPlan>,
     onApply: (BuildPlan) -> Unit,
     onShare: (BuildPlan) -> Unit,
@@ -2258,6 +2281,7 @@ private fun BuildPlanLibraryPage(
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Spacer(Modifier.height(topBarHeight + 16.dp))
         if (plans.isEmpty()) {
             ExpressiveSectionCard(
                 title = stringResource(R.string.build_no_plans),
@@ -2340,6 +2364,7 @@ private fun BuildPlanLibraryItem(
 
 @Composable
 private fun BuildQueuePage(
+    topBarHeight: Dp,
     queue: List<BuildQueueItem>,
     cancellingRunIds: Set<Long>,
     onApply: (BuildQueueItem) -> Unit,
@@ -2356,6 +2381,7 @@ private fun BuildQueuePage(
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Spacer(Modifier.height(topBarHeight + 16.dp))
         ExpressiveSectionCard(
             title = stringResource(R.string.build_queue_status),
             subtitle = if (queue.isEmpty()) {
@@ -2687,7 +2713,7 @@ private fun formatCustomKernelImportSummary(context: Context, result: CustomKern
 
 @Composable
 private fun BuildKernelOptionsPage(
-    padding: PaddingValues,
+    topBarHeight: Dp,
     options: List<IndexedValue<CustomKernelOption>>,
     summary: CustomKernelOptionSummary,
     searchQuery: String,
@@ -2698,11 +2724,10 @@ private fun BuildKernelOptionsPage(
 ) {
     LazyColumn(
         modifier = Modifier
-            .padding(padding)
             .fillMaxSize()
             .padding(horizontal = AbkScreenHorizontalPadding),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(bottom = bottomPadding + 24.dp)
+        contentPadding = PaddingValues(top = topBarHeight + 16.dp, bottom = bottomPadding + 24.dp)
     ) {
         item(key = "search") {
             BuildKernelOptionSearchField(
@@ -3283,10 +3308,14 @@ private fun BuildStatusBanner(
         BuildStatus.CANCELLED -> Triple(Icons.Default.Cancel, stringResource(R.string.build_cancelled), MaterialTheme.colorScheme.outline)
         else -> return
     }
+    val shape = MaterialTheme.shapes.medium
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .blurredCardBackground(shape),
+        shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
         )
     ) {
         Row(
@@ -3351,10 +3380,15 @@ private fun BuildProgressCard(
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "build-progress"
     )
+    val shape = MaterialTheme.shapes.medium
     Card(
-        modifier = Modifier.fillMaxWidth().animateContentSize(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize()
+            .blurredCardBackground(shape),
+        shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = uiSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
+            containerColor = blurredCardSurfaceColor(MaterialTheme.colorScheme.surfaceContainer)
         )
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

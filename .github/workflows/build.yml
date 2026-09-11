@@ -2199,6 +2199,53 @@ jobs:
               echo "已修复 memory.c 缺少 susfs_def.h 问题"
             }
 
+            fix_statfs_sus_kstat_proto() {
+              local file="./fs/statfs.c"
+              local symbol="susfs_sus_kstat_spoof_vfs_statfs"
+              [ -f "$file" ] || return 0
+              grep -q "$symbol" "$file" || return 0
+
+              # SUSFS v2.3.0 的 50_add_susfs_in_gki-android12-5.10.patch 把调用点写在
+              # extern 原型之前 26 行，而内核 Makefile 无条件带 -Werror=implicit-function-declaration，
+              # 于是 fs/statfs.c 必然编译失败。这里把原型补到调用点之前（保持幂等）。
+              if awk -v sym="$symbol" '
+                $0 ~ "^[[:space:]]*(extern[[:space:]]+)?int[[:space:]]+" sym "[[:space:]]*\\(" { found=1; exit 0 }
+                $0 ~ sym "[[:space:]]*\\(" { bad=1; exit 1 }
+                END { if (found) exit 0; exit 1 }
+              ' "$file"; then
+                return 0
+              fi
+
+              if ! grep -qE '^[[:space:]]*static[[:space:]]+int[[:space:]]+susfs_statfs_by_dentry[[:space:]]*\(' "$file"; then
+                echo "::warning::statfs.c 中的 ${symbol} 缺少前置声明，且未找到插入位置"
+                return 0
+              fi
+
+              sed -i "/^[[:space:]]*static[[:space:]]\+int[[:space:]]\+susfs_statfs_by_dentry[[:space:]]*(/i extern int ${symbol}(struct inode *inode, struct kstatfs *buf, bool *is_fuse);" "$file"
+              echo "已为 fs/statfs.c 补齐 ${symbol} 的前置原型"
+            }
+
+            fix_susfs_missing_security_h() {
+              local file="./fs/susfs.c"
+              [ -f "$file" ] || return 0
+              grep -q 'security_sb_statfs' "$file" || return 0
+              grep -q '#include <linux/security.h>' "$file" && return 0
+
+              # 同一次重构（SUSFS v2.3.0）把 security_sb_statfs() 的调用搬进了 fs/susfs.c，
+              # 却没带上 <linux/security.h>，编译时同样是隐式声明错误。
+              if grep -q '^#include <linux/susfs.h>' "$file"; then
+                sed -i '0,/^#include <linux\/susfs.h>/s//#include <linux\/security.h>\n#include <linux\/susfs.h>/' "$file"
+              else
+                sed -i '0,/^#include /s//#include <linux\/security.h>\n&/' "$file"
+              fi
+
+              if grep -q '#include <linux/security.h>' "$file"; then
+                echo "已为 fs/susfs.c 注入 <linux/security.h>"
+              else
+                echo "::warning::fs/susfs.c 使用 security_sb_statfs，但未能注入 <linux/security.h>"
+              fi
+            }
+
             fix_selinux_extern_static() {
               local file="./security/selinux/hooks.c"
               if [ -f "$file" ] && grep -qF 'extern static int security_context_to_sid_with_policy' "$file"; then
@@ -2404,6 +2451,8 @@ jobs:
             fi
 
             fix_task_mmu_vma_pad_start
+            fix_statfs_sus_kstat_proto
+            fix_susfs_missing_security_h
           fi
 
       - name: 确保 SUSFS Kconfig 与核心对象

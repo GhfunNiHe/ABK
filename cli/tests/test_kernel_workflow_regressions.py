@@ -1,5 +1,6 @@
 import importlib.util
 import re
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = ROOT / ".github" / "workflows" / "build.yml"
+PREFLIGHT_WORKFLOW_PATH = ROOT / ".github" / "workflows" / "kernel-source.yml"
 REF_SCRIPT_PATH = ROOT / ".github" / "scripts" / "resolve-ksu-ref.sh"
 KSU_COMPAT_PATH = ROOT / ".github" / "scripts" / "ensure-ksu-compat.py"
 SALVAGE_SCRIPT_PATH = ROOT / ".github" / "scripts" / "salvage-patch-rejects.py"
@@ -16,6 +18,7 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        cls.preflight_workflow = PREFLIGHT_WORKFLOW_PATH.read_text(encoding="utf-8")
         cls.ref_script = REF_SCRIPT_PATH.read_text(encoding="utf-8")
         spec = importlib.util.spec_from_file_location("ensure_ksu_compat", KSU_COMPAT_PATH)
         cls.ksu_compat = importlib.util.module_from_spec(spec)
@@ -190,6 +193,70 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
             block,
         )
 
+    def test_preflight_queries_custom_source_repo_for_named_refs(self):
+        function = self._preflight_function("resolve_named_ref")
+        self.assertIn('git -C "$source_dir" ls-remote origin', function)
+        self.assertNotRegex(function, r"(?m)^\s*done < <\(git ls-remote origin")
+        self.assertIn('"refs/heads/$ref"', function)
+        self.assertIn('"refs/tags/$ref"', function)
+        self.assertIn('echo "::error::找不到源码 ref: $ref（源码仓库 $normalized_url）" >&2', function)
+
+    def test_preflight_named_ref_resolution_uses_source_dir_not_workspace_repo(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_repo = root / "source"
+            upstream_repo = root / "upstream"
+            workspace_repo = root / "workspace"
+
+            self._init_repo(source_repo, branch="main", content="VERSION = 5\n")
+            subprocess.run(
+                ["git", "-C", str(source_repo), "branch", "melt-rebase"],
+                check=True,
+                capture_output=True,
+            )
+            # 预检会先给 source_dir 配上 origin，再按分支名解析。
+            subprocess.run(
+                ["git", "-C", str(source_repo), "remote", "add", "origin", str(source_repo)],
+                check=True,
+                capture_output=True,
+            )
+            # 模拟 ABK 检出：自己的 origin 指向另一个仓库，且没有 melt-rebase。
+            self._init_repo(upstream_repo, branch="dev", content="ABK\n")
+            self._init_repo(workspace_repo, branch="dev", content="ABK checkout\n")
+            subprocess.run(
+                ["git", "-C", str(workspace_repo), "remote", "add", "origin", str(upstream_repo)],
+                check=True,
+                capture_output=True,
+            )
+
+            # 裸 `ls-remote origin` 在工作区仓库里跑，永远找不到自定义源码仓的分支。
+            bare = subprocess.run(
+                ["git", "ls-remote", "origin", "melt-rebase", "refs/heads/melt-rebase"],
+                cwd=workspace_repo,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual("", bare.stdout)
+
+            function = self._preflight_function("resolve_named_ref")
+            script = "\n".join(
+                [
+                    "set -euo pipefail",
+                    f'source_dir="{source_repo}"',
+                    function,
+                    'printf "%s" "$(resolve_named_ref melt-rebase)"',
+                ]
+            )
+            resolved = subprocess.run(
+                ["bash", "-c", script],
+                cwd=workspace_repo,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual("refs/heads/melt-rebase", resolved.stdout)
+
     def test_salvage_replays_vendor_include_head_hunk(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -315,6 +382,39 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
         )
         self.assertIsNotNone(match, f"step not found: {name}")
         return match.group("body")
+
+    def _preflight_function(self, name):
+        match = re.search(
+            rf"(?ms)^(?P<indent>[ ]*){re.escape(name)}\(\) \{{\n.*?^(?P=indent)\}}\n",
+            self.preflight_workflow,
+        )
+        self.assertIsNotNone(match, f"function not found in kernel-source.yml: {name}")
+        return match.group(0)
+
+    def _init_repo(self, path, branch, content):
+        subprocess.run(
+            ["git", "init", "-q", "-b", branch, str(path)],
+            check=True,
+            capture_output=True,
+        )
+        (path / "README.md").write_text(content, encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(path), "add", "-A"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C", str(path),
+                "-c", "user.name=ABK Tests",
+                "-c", "user.email=tests@example.invalid",
+                "-c", "commit.gpgsign=false",
+                "commit", "-qm", "init",
+            ],
+            check=True,
+            capture_output=True,
+        )
 
 
 if __name__ == "__main__":

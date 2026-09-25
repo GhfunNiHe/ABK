@@ -1114,6 +1114,84 @@ jobs:
             sed -i "s/\"${FORMATTED_BRANCH}\"/\"deprecated\/${FORMATTED_BRANCH}\"/g" $DEFAULT_MANIFEST_PATH
           fi
 
+          # 内核源码的 common/build.config.constants 决定 CLANG_VERSION，build.sh 会把
+          # prebuilts/clang/host/linux-x86/clang-<version>/bin 前插到 PATH。清单默认 rev
+          # 若不含该版本，PATH 会指向不存在的目录，最终表现为
+          # "ccache: error: Could not find compiler \"clang\" in PATH"。
+          REQUIRED_CLANG=""
+          if [ "$SOURCE_MODE" = "custom_git" ] && [[ "$SOURCE_REPO" == https://github.com/* ]]; then
+            source_slug="${SOURCE_REPO#https://github.com/}"
+            source_slug="${source_slug%.git}"
+            auth_header=()
+            if [ "$SOURCE_PRIVATE" = "true" ] && [ -n "${ABK_CUSTOM_SOURCE_GITHUB_TOKEN:-}" ]; then
+              auth_header=(-H "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$ABK_CUSTOM_SOURCE_GITHUB_TOKEN" | base64 -w0)")
+            fi
+            REQUIRED_CLANG=$(curl -fsSL --max-time 30 "${auth_header[@]}" \
+              "https://raw.githubusercontent.com/${source_slug}/${SOURCE_COMMIT}/build.config.constants" 2>/dev/null \
+              | sed -n 's/^CLANG_VERSION=//p' | head -n1 || true)
+            REQUIRED_CLANG="${REQUIRED_CLANG//[[:space:]]/}"
+          fi
+
+          clang_branch_has_version() {
+            local branch="$1" body
+            [ -n "$branch" ] || return 1
+            body=$(curl -fsSL --max-time 30 \
+              "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+/refs/heads/${branch}/?format=JSON" \
+              2>/dev/null || true)
+            grep -q "\"clang-${REQUIRED_CLANG}\"" <<< "$body"
+          }
+
+          if [ -n "$REQUIRED_CLANG" ]; then
+            DEFAULT_CLANG_REV=$(grep -m1 -o '<default [^>]*>' "$DEFAULT_MANIFEST_PATH" \
+              | grep -o 'revision="[^"]*"' | head -n1 | cut -d'"' -f2)
+            CLANG_PINNED_REV=""
+            # 按年代升序探测，优先命中体积更小的分支（例如 r547379 在
+            # main-kernel-2025 就有，不必拉取含多个工具链的 main-kernel-2026/master）。
+            for candidate in "$DEFAULT_CLANG_REV" master-kernel-build-2022 \
+              main-kernel-build-2023 main-kernel-build-2024 main-kernel-2025 \
+              main-kernel-2026 main-kernel master; do
+              if clang_branch_has_version "$candidate"; then
+                CLANG_PINNED_REV="$candidate"
+                break
+              fi
+            done
+
+            if [ -z "$CLANG_PINNED_REV" ]; then
+              echo "::warning::未找到提供 clang-${REQUIRED_CLANG} 的 prebuilts/clang 分支，保持清单默认 rev"
+            elif [ "$CLANG_PINNED_REV" = "$DEFAULT_CLANG_REV" ]; then
+              echo "clang-${REQUIRED_CLANG} 由清单默认分支 ${DEFAULT_CLANG_REV} 提供，无需固定"
+            else
+              echo "源码需要 clang-${REQUIRED_CLANG}（清单默认分支 ${DEFAULT_CLANG_REV} 未提供），固定到 ${CLANG_PINNED_REV}"
+              python3 - "$DEFAULT_MANIFEST_PATH" "$CLANG_PINNED_REV" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          manifest_path = Path(sys.argv[1])
+          revision = sys.argv[2]
+          text = manifest_path.read_text(encoding="utf-8")
+          pattern = re.compile(
+              r'<project\b[^>]*name="platform/prebuilts/clang/host/linux-x86"[^>]*?/>'
+          )
+          match = pattern.search(text)
+          if not match:
+              raise SystemExit(f"未在 {manifest_path} 找到 prebuilts/clang 项目条目")
+
+          entry = match.group(0)
+          if "revision=" in entry:
+              print(f"prebuilts/clang 已指定 revision，保持不变: {entry.strip()}")
+          else:
+              patched = entry[:-2].rstrip() + f' revision="refs/heads/{revision}" />'
+              manifest_path.write_text(
+                  text[: match.start()] + patched + text[match.end():], encoding="utf-8"
+              )
+              print(f"已固定 prebuilts/clang -> refs/heads/{revision}")
+          PY
+            fi
+          elif [ "$SOURCE_MODE" = "custom_git" ]; then
+            echo "::warning::未能解析自定义源码的 CLANG_VERSION，保持 prebuilts/clang 的清单默认 rev"
+          fi
+
           repo_sync_retry() {
             local attempt
             for attempt in 1 2 3; do

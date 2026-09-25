@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = ROOT / ".github" / "workflows" / "build.yml"
 REF_SCRIPT_PATH = ROOT / ".github" / "scripts" / "resolve-ksu-ref.sh"
 KSU_COMPAT_PATH = ROOT / ".github" / "scripts" / "ensure-ksu-compat.py"
+SALVAGE_SCRIPT_PATH = ROOT / ".github" / "scripts" / "salvage-patch-rejects.py"
 
 
 class KernelWorkflowRegressionTests(unittest.TestCase):
@@ -19,6 +20,9 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("ensure_ksu_compat", KSU_COMPAT_PATH)
         cls.ksu_compat = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.ksu_compat)
+        salvage_spec = importlib.util.spec_from_file_location("salvage_patch_rejects", SALVAGE_SCRIPT_PATH)
+        cls.salvage = importlib.util.module_from_spec(salvage_spec)
+        salvage_spec.loader.exec_module(cls.salvage)
 
     def test_sukisu_setup_accepts_resolved_bare_sha(self):
         block = self._step_run_block("添加 KernelSU")
@@ -176,6 +180,121 @@ class KernelWorkflowRegressionTests(unittest.TestCase):
             block,
         )
         self.assertIn("#endif // #ifdef CONFIG_KSU_SUSFS", block)
+
+    def test_susfs_step_salvages_rejected_addition_hunks(self):
+        block = self._step_run_block("应用 SUSFS 补丁")
+        self.assertIn("salvage-patch-rejects.py", block)
+        self.assertIn('--root "$KERNEL_ROOT/common"', block)
+        self.assertIn(
+            '--patch "./50_add_susfs_in_gki-${ABK_ANDROID_VERSION}-${ABK_KERNEL_VERSION}.patch"',
+            block,
+        )
+
+    def test_salvage_replays_vendor_include_head_hunk(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            target = root / "fs" / "proc" / "task_mmu.c"
+            target.parent.mkdir(parents=True)
+            target.write_text(
+                "#include <linux/shmem_fs.h>\n"
+                "#include <linux/uaccess.h>\n"
+                "#include <linux/pkeys.h>\n"
+                "#include <trace/hooks/mm.h>\n"
+                "\n"
+                "#include <asm/elf.h>\n",
+                encoding="utf-8",
+            )
+            reject = Path(f"{target}.rej")
+            reject.write_text(
+                "--- fs/proc/task_mmu.c\n"
+                "+++ fs/proc/task_mmu.c\n"
+                "@@ -21,6 +21,9 @@\n"
+                " #include <linux/shmem_fs.h>\n"
+                " #include <linux/uaccess.h>\n"
+                " #include <linux/pkeys.h>\n"
+                "+#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP) "
+                "|| defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)\n"
+                "+#include <linux/susfs_def.h>\n"
+                "+#endif // #if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP) "
+                "|| defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)\n"
+                " \n"
+                " #include <asm/elf.h>\n",
+                encoding="utf-8",
+            )
+            unrelated = root / "kernel" / "time" / "timer.c.rej"
+            unrelated.parent.mkdir(parents=True)
+            unrelated.write_text("--- kernel/time/timer.c\n", encoding="utf-8")
+
+            patch_text = "diff --git a/fs/proc/task_mmu.c b/fs/proc/task_mmu.c\n"
+            stats = self.salvage.salvage(root, patch_text)
+
+            self.assertEqual(stats["repaired"], 1)
+            self.assertEqual(stats["unresolved"], 0)
+            self.assertEqual(stats["ignored"], 1)
+            self.assertFalse(reject.exists())
+            self.assertTrue(unrelated.exists())
+            repatched = target.read_text(encoding="utf-8")
+            self.assertIn("#include <linux/susfs_def.h>", repatched)
+            self.assertIn("#include <trace/hooks/mm.h>", repatched)
+            self.assertLess(
+                repatched.index("#include <linux/susfs_def.h>"),
+                repatched.index("#include <trace/hooks/mm.h>"),
+            )
+
+    def test_salvage_keeps_rejected_hunks_that_remove_lines(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            target = root / "fs" / "namespace.c"
+            target.parent.mkdir(parents=True)
+            original = "#include <linux/mnt_idmapping.h>\nold_line();\n"
+            target.write_text(original, encoding="utf-8")
+            reject = Path(f"{target}.rej")
+            reject.write_text(
+                "--- fs/namespace.c\n"
+                "+++ fs/namespace.c\n"
+                "@@ -1,2 +1,2 @@\n"
+                " #include <linux/mnt_idmapping.h>\n"
+                "-old_line();\n"
+                "+new_line();\n",
+                encoding="utf-8",
+            )
+
+            stats = self.salvage.salvage(
+                root,
+                "diff --git a/fs/namespace.c b/fs/namespace.c\n",
+            )
+
+            self.assertEqual(stats["repaired"], 0)
+            self.assertEqual(stats["unresolved"], 1)
+            self.assertTrue(reject.exists())
+            self.assertEqual(target.read_text(encoding="utf-8"), original)
+
+    def test_salvage_keeps_rejects_with_ambiguous_anchor(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            target = root / "fs" / "super.c"
+            target.parent.mkdir(parents=True)
+            original = "#include <linux/fs.h>\n\n#include <linux/fs.h>\n"
+            target.write_text(original, encoding="utf-8")
+            reject = Path(f"{target}.rej")
+            reject.write_text(
+                "--- fs/super.c\n"
+                "+++ fs/super.c\n"
+                "@@ -1,1 +1,2 @@\n"
+                " #include <linux/fs.h>\n"
+                "+#include <linux/susfs_def.h>\n",
+                encoding="utf-8",
+            )
+
+            stats = self.salvage.salvage(
+                root,
+                "diff --git a/fs/super.c b/fs/super.c\n",
+            )
+
+            self.assertEqual(stats["repaired"], 0)
+            self.assertEqual(stats["unresolved"], 1)
+            self.assertTrue(reject.exists())
+            self.assertEqual(target.read_text(encoding="utf-8"), original)
 
     def test_android16_uses_native_ntsync_source(self):
         block = self._step_run_block("应用 NTsync 补丁")

@@ -68,6 +68,20 @@ bool_is_true() {
     esac
 }
 
+repo_script() {
+    local name="$1"
+    local dir="$ROOT_DIR"
+
+    while [[ "$dir" != "/" && -n "$dir" ]]; do
+        if [[ -f "$dir/.github/scripts/$name" ]]; then
+            printf '%s\n' "$dir/.github/scripts/$name"
+            return 0
+        fi
+        dir="$(dirname "$dir")"
+    done
+    return 1
+}
+
 normalize_variant() {
     case "${1,,}" in
         none) printf 'None\n' ;;
@@ -996,6 +1010,15 @@ apply_susfs_patch_stack() {
         cd "$KERNEL_ROOT/common"
         patch -p1 <"50_add_susfs_in_gki-${ANDROID_VERSION}-${KERNEL_VERSION}.patch" || true
     )
+
+    # 厂商源码树多出 `#include <trace/hooks/*.h>` 一类行时，补丁的文件头 hunk 会整块漏打，
+    # 只剩函数体里的 SUSFS 宏调用，编译报 implicit declaration。这里重放“纯新增”的 reject hunk。
+    local salvage_script
+    if salvage_script="$(repo_script salvage-patch-rejects.py)"; then
+        python3 "$salvage_script" \
+            --root "$KERNEL_ROOT/common" \
+            --patch "./50_add_susfs_in_gki-${ANDROID_VERSION}-${KERNEL_VERSION}.patch"
+    fi
 
     if [[ "$variant" == "SukiSU" || "$variant" == "ReSukiSU" ]]; then
         [[ -f "$KERNEL_ROOT/common/fs/susfs.c" ]] && \

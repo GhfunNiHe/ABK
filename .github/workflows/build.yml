@@ -2033,6 +2033,14 @@ jobs:
           cd $KERNEL_ROOT/common
           patch -p1 < "50_add_susfs_in_gki-${ABK_ANDROID_VERSION}-${ABK_KERNEL_VERSION}.patch" || true
 
+          # 厂商源码树多出 `#include <trace/hooks/mm.h>` 一类行时，本补丁的文件头 hunk 会整块
+          # 漏打（5.15.216 的 fs/proc/task_mmu.c、fs/namespace.c），只剩函数体里的 SUSFS 宏调用，
+          # 编译报 implicit declaration of 'SUSFS_IS_INODE_*' / 未声明的 DEFAULT_KSU_MNT_ID。
+          # 这里只对“纯新增”的 reject hunk 做一次定位重放，新增行全部落盘后才移除 .rej。
+          python3 "$GITHUB_WORKSPACE/.github/scripts/salvage-patch-rejects.py" \
+            --root "$KERNEL_ROOT/common" \
+            --patch "./50_add_susfs_in_gki-${ABK_ANDROID_VERSION}-${ABK_KERNEL_VERSION}.patch"
+
           if [ "$ABK_KSU_VARIANT" == "SukiSU" ] || [ "$ABK_KSU_VARIANT" == "ReSukiSU" ]; then
             SUSFS_C="./fs/susfs.c"
             if [ -f "$SUSFS_C" ] && grep -q '^static void susfs_run_sus_path_loop(' "$SUSFS_C"; then

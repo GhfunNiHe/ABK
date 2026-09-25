@@ -193,10 +193,12 @@ jobs:
                 refs/tags/*'^{}') continue ;;
               esac
               candidates+=("$remote_ref")
-            done < <(git ls-remote origin "$ref" "refs/heads/$ref" "refs/tags/$ref")
+            # 必须显式指向 $source_dir：裸 `git ls-remote origin` 会在当前工作目录（ABK 检出）里
+            # 解析 remote，查的是 ABK 自己而不是自定义源码仓，分支/标签名会一律“找不到”。
+            done < <(git -C "$source_dir" ls-remote origin "$ref" "refs/heads/$ref" "refs/tags/$ref")
             mapfile -t candidates < <(printf '%s\n' "${candidates[@]}" | sed '/^$/d' | sort -u)
             if [ "${#candidates[@]}" -eq 0 ]; then
-              echo "::error::找不到源码 ref: $ref" >&2
+              echo "::error::找不到源码 ref: $ref（源码仓库 $normalized_url）" >&2
               return 1
             fi
             if [ "${#candidates[@]}" -gt 1 ]; then

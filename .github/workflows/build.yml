@@ -2303,6 +2303,41 @@ jobs:
               echo "已修复 memory.c 缺少 susfs_def.h 问题"
             }
 
+            fix_task_mmu_missing_susfs_def() {
+              local file="./fs/proc/task_mmu.c"
+              [ -f "$file" ] || return 0
+              grep -qE 'SUSFS_IS_INODE_SUS_MAP|SUSFS_IS_INODE_OPEN_REDIRECT' "$file" || return 0
+              grep -qF '#include <linux/susfs_def.h>' "$file" && return 0
+
+              python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("./fs/proc/task_mmu.c")
+          text = path.read_text()
+
+          if "#include <linux/susfs_def.h>" in text:
+              raise SystemExit(0)
+
+          anchor_matches = list(re.finditer(r'(?m)^#include\s+"internal\.h"\s*$', text))
+          if anchor_matches:
+              insert_at = anchor_matches[-1].end()
+          else:
+              include_matches = list(re.finditer(r'(?m)^#include\s+[<\"].*[>\"]\s*$', text))
+              if not include_matches:
+                  raise SystemExit(f"{path} 使用 SUSFS SUS_MAP/OPEN_REDIRECT 宏，但无法定位头文件区域")
+              insert_at = include_matches[-1].end()
+
+          block = """
+
+          #ifdef CONFIG_KSU_SUSFS
+          #include <linux/susfs_def.h>
+          #endif"""
+          path.write_text(text[:insert_at] + block + text[insert_at:])
+          print("已为 task_mmu.c 注入 susfs_def.h 兼容定义")
+          PY
+            }
+
             fix_selinux_extern_static() {
               local file="./security/selinux/hooks.c"
               if [ -f "$file" ] && grep -qF 'extern static int security_context_to_sid_with_policy' "$file"; then
@@ -2667,6 +2702,7 @@ jobs:
               fi
             fi
 
+            fix_task_mmu_missing_susfs_def
             fix_task_mmu_vma_pad_start
           fi
 

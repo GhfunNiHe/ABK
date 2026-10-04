@@ -2548,6 +2548,79 @@ jobs:
 
             ensure_susfs_super_compat
 
+            ensure_susfs_namespace_includes() {
+              local file="./fs/namespace.c"
+              [ -f "$file" ] || return 0
+
+              python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("./fs/namespace.c")
+          text = path.read_text()
+
+          # 仅当 SUSFS 的函数体已经打进 namespace.c（说明补丁主体应用过）才补头部声明。
+          # 上游 50_add_susfs 补丁的首个 hunk 依赖 namespace.c 顶部 include 的精确上下文，
+          # 自定义内核源码（如 djt889/android_gki_kernel_5.15_common）常在 #include "internal.h"
+          # 后插入 vendor include（如 <trace/hooks/blk.h>），导致该 hunk reject，进而漏掉
+          # susfs_def.h 与 SUS_MOUNT 的 extern/#define，编译报大量 undeclared identifier。
+          needed = (
+              "susfs_is_current_ksu_domain",
+              "susfs_is_sdcard_android_data_not_decrypted",
+              "VFSMOUNT_MNT_FLAGS_KSU_UNSHARED_MNT",
+          )
+          if not any(name in text for name in needed):
+              raise SystemExit(0)
+
+          if "#include <linux/susfs_def.h>" not in text:
+              for anchor in (
+                  "#include <linux/mnt_idmapping.h>\n",
+                  "#include <linux/shmem_fs.h>\n",
+                  "#include <linux/fs_context.h>\n",
+                  "#include <linux/mnt_namespace.h>\n",
+                  "#include <linux/namei.h>\n",
+              ):
+                  if anchor in text:
+                      text = text.replace(
+                          anchor,
+                          anchor
+                          + "#ifdef CONFIG_KSU_SUSFS\n"
+                          + "#include <linux/susfs_def.h>\n"
+                          + "#endif // #ifdef CONFIG_KSU_SUSFS\n",
+                          1,
+                      )
+                      break
+              else:
+                  raise SystemExit("无法定位 fs/namespace.c 的 susfs_def.h 插入点")
+
+          if "extern bool susfs_is_current_ksu_domain(void);" not in text:
+              for anchor in (
+                  '#include "internal.h"\n',
+                  '#include "pnode.h"\n',
+              ):
+                  if anchor in text:
+                      text = text.replace(
+                          anchor,
+                          anchor
+                          + "\n#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n"
+                          + "extern bool susfs_is_current_ksu_domain(void);\n"
+                          + "extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;\n"
+                          + "\n#ifndef CL_COPY_MNT_NS\n"
+                          + "#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */\n"
+                          + "#endif\n"
+                          + "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n",
+                          1,
+                      )
+                      break
+              else:
+                  raise SystemExit("无法定位 fs/namespace.c 的 SUSFS extern 插入点")
+
+          path.write_text(text)
+          print("已补齐 fs/namespace.c 的 SUSFS include/extern 声明")
+          PY
+            }
+
+            ensure_susfs_namespace_includes
+
             # Android 12 - 5.10 修复
             if [[ "$ABK_ANDROID_VERSION" == "android12" && "$ABK_KERNEL_VERSION" == "5.10" ]]; then
               if sub_in_range "$CURRENT_SUB" 43 117; then

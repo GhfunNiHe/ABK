@@ -22,6 +22,12 @@ import org.junit.Test
 class BuildPlanLogicTest {
 
     @Test
+    fun workflowInputMapSerializesUploadToRelease() {
+        assertEquals("true", KernelBuildConfig(uploadToRelease = true).toInputMap()["upload_to_release"])
+        assertEquals("false", KernelBuildConfig().toInputMap()["upload_to_release"])
+    }
+
+    @Test
     fun fullBuildPlanPayloadRoundTripsConfigAndModules() {
         val config = KernelSupport.normalize(
             KernelBuildConfig(

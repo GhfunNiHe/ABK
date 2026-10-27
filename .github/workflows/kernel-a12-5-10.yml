@@ -115,6 +115,11 @@ on:
         required: false
         type: string
         default: ""
+      upload_to_release:
+        description: "构建完成后将产物上传到 GitHub Release（自动生成标签）"
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       kernelsu_variant:
@@ -184,6 +189,10 @@ on:
         required: false
         type: string
         default: ""
+      upload_to_release:
+        required: false
+        type: boolean
+        default: false
       called_from_main:
         description: "是否从 main.yml 调用（内部使用）"
         required: false
@@ -291,6 +300,7 @@ jobs:
       kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
+      upload_to_release: ${{ inputs.upload_to_release || false }}
       upload_aux_artifacts: false
 
   # 仅在直接触发时运行，从 main.yml 调用时跳过

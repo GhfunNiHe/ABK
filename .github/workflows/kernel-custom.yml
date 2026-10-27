@@ -173,6 +173,11 @@ on:
         required: false
         type: string
         default: ""
+      upload_to_release:
+        description: "构建完成后将产物上传到 GitHub Release（自动生成标签）"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build-custom-kernel:
@@ -205,6 +210,7 @@ jobs:
       kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
+      upload_to_release: ${{ inputs.upload_to_release || false }}
 
   get-ksu-manager:
     uses: ./.github/workflows/get-manager.yml

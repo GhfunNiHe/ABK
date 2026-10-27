@@ -1760,6 +1760,7 @@ private fun runtimeFeatureLabel(key: String): String = when (key) {
     "use_networking" -> stringResource(R.string.runtime_feature_networking)
     "use_kpm" -> "KPM"
     "use_rekernel" -> "Re-Kernel"
+    "upload_to_release" -> "Release"
     "enable_susfs" -> "SUSFS"
     "supp_op" -> "SukiSU SUS_SU"
     "zram_full_algo" -> stringResource(R.string.runtime_feature_zram_full_algo)

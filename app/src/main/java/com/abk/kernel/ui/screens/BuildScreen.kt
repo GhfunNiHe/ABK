@@ -1372,6 +1372,7 @@ fun BuildScreen(
                             useNetworking = false,
                             useKpm = false,
                             useRekernel = false,
+                            uploadToRelease = false,
                             cancelSusfs = true,
                             virtualizationSupport = "off",
                             useCustomExternalModules = false,
@@ -1837,6 +1838,9 @@ fun BuildScreen(
                     )
                     SwitchRow(stringResource(R.string.build_enable_oneplus_8e), config.suppOp) {
                         vm.updateBuildConfig(config.copy(suppOp = it))
+                    }
+                    SwitchRow(stringResource(R.string.build_upload_to_release), config.uploadToRelease) {
+                        vm.updateBuildConfig(config.copy(uploadToRelease = it))
                     }
                 }
             }
@@ -3557,6 +3561,7 @@ private fun buildPlanSummary(config: KernelBuildConfig): String {
     if (config.useNetworking) enabled += stringResource(R.string.build_feature_networking)
     if (config.useKpm) enabled += "KPM"
     if (config.useRekernel) enabled += "Re-Kernel"
+    if (config.uploadToRelease) enabled += "Release"
     if (config.virtualizationSupport != "off") {
         enabled += stringResource(R.string.build_feature_virtualization, virtualizationSupportLabel(config.virtualizationSupport))
     }

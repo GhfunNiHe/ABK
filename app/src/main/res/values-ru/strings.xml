@@ -194,6 +194,7 @@
     <string name="build_enable_networking">Включить сетевые улучшения (IPSet + BBR)</string>
     <string name="build_enable_kpm">Включить KPM</string>
     <string name="build_enable_rekernel">Включить драйвер Re-Kernel (тест)</string>
+    <string name="build_upload_to_release">Загружать артефакты сборки в GitHub Release</string>
     <string name="build_virtualization_support">Поддержка виртуализации</string>
     <string name="build_section_kernel_options_desc">Переопределяет defconfig построчно. Поддерживает y / m / выключено / игнор / сырое значение и имеет приоритет над встроенными переключателями страницы.</string>
     <string name="build_kernel_options_summary">Всего %1$d · включено %2$d · выключено %3$d · игнор %4$d</string>

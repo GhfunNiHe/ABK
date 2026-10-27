@@ -6076,7 +6076,8 @@ internal fun decodeBuildPlanPayload(
         onePlusUseLz4kd = featureMask.hasBuildPlanFlag(11),
         onePlusUseBbr = featureMask.hasBuildPlanFlag(12),
         onePlusUseProxyOptimization = featureMask.hasBuildPlanFlag(13),
-        onePlusUseUnicodeBypass = featureMask.hasBuildPlanFlag(14)
+        onePlusUseUnicodeBypass = featureMask.hasBuildPlanFlag(14),
+        uploadToRelease = featureMask.hasBuildPlanFlag(15)
     )
     return DecodedBuildPlanCode(
         name = name,
@@ -6177,6 +6178,7 @@ private fun KernelBuildConfig.toBuildPlanFeatureMask(): Int {
     set(12, onePlusUseBbr)
     set(13, onePlusUseProxyOptimization)
     set(14, onePlusUseUnicodeBypass)
+    set(15, uploadToRelease)
     return mask
 }
 
@@ -6744,6 +6746,7 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
         "use_networking" to config.useNetworking.toString(),
         "use_kpm" to config.useKpm.toString(),
         "use_rekernel" to config.useRekernel.toString(),
+        "upload_to_release" to config.uploadToRelease.toString(),
         "cancel_susfs" to config.cancelSusfs.toString(),
         "supp_op" to config.suppOp.toString(),
         "zram_full_algo" to config.zramFullAlgo.toString(),

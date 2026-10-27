@@ -171,6 +171,10 @@ on:
         required: false
         type: boolean
         default: true
+      upload_to_release:
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build-kernel:
@@ -6776,6 +6780,35 @@ jobs:
             LICENSE
             THIRD_PARTY_NOTICES.md
           compression-level: 9
+
+      - name: 发布构建产物到 Release
+        if: ${{ inputs.upload_to_release }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          build_date="$(date -u +%Y%m%d)"
+          tag="kernel-${{ inputs.kernel_version }}-${{ inputs.ksu_variant }}-${build_date}"
+          title="Kernel ${{ inputs.kernel_version }}.${{ inputs.sub_level }} (${{ inputs.android_version }}) - ${{ inputs.ksu_variant }} ${build_date}"
+          notes="ABK 构建产物：${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ inputs.sub_level }} ${{ inputs.os_patch_level }} / KSU ${{ inputs.ksu_variant }} (${{ inputs.ksu_branch }})"
+
+          mapfile -t bundles < <(find . -maxdepth 1 -type f -name '*.bundle.zip' | sort)
+          if [ "${#bundles[@]}" -eq 0 ]; then
+            echo "::error::未找到可发布的构建产物 (*.bundle.zip)"
+            exit 1
+          fi
+
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --title "$title" --notes "$notes"
+          else
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --title "$title" --notes "$notes"
+          fi
+
+          gh release upload "$tag" "${bundles[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          echo "已发布到 Release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$tag"
+          echo "### Release 已发布：\`$tag\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: 上传补丁冲突文件
         if: always() && env.REJ_COUNT > 0

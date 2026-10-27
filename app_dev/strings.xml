@@ -192,6 +192,7 @@
     <string name="build_enable_networking">启用网络增强 (IPSet + BBR)</string>
     <string name="build_enable_kpm">启用 KPM 功能</string>
     <string name="build_enable_rekernel">启用 Re-Kernel 驱动 (测试)</string>
+    <string name="build_upload_to_release">构建完成后上传产物到 GitHub Release</string>
     <string name="build_virtualization_support">虚拟化支持</string>
     <string name="build_kernel_options_title">自定义内核选项</string>
     <string name="build_kernel_option_add">添加条目</string>

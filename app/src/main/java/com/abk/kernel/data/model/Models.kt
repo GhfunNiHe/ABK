@@ -650,6 +650,7 @@ data class KernelBuildConfig(
     val useRekernel: Boolean = false,
     val cancelSusfs: Boolean = false,
     val suppOp: Boolean = false,
+    val uploadToRelease: Boolean = false,
     val zramFullAlgo: Boolean = false,
     val zramExtraAlgos: String = "",
     val kpmPassword: String = "",

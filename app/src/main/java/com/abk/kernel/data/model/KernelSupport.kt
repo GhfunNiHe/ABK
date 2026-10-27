@@ -323,6 +323,7 @@ object KernelSupport {
             useNtsync = if (isOnePlus) false else config.useNtsync,
             useNetworking = if (isOnePlus) false else config.useNetworking,
             useRekernel = if (isOnePlus) false else config.useRekernel,
+            uploadToRelease = if (isOnePlus) false else config.uploadToRelease,
             useKpm = when {
                 ksuVariant == KSU_VARIANT_NONE -> false
                 isOnePlus -> onePlusKpmSupported && config.useKpm

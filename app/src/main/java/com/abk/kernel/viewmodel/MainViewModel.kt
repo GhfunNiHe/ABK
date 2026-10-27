@@ -6691,7 +6691,7 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
             "source_private" to (config.sourceAccessMode == SOURCE_ACCESS_GITHUB_PRIVATE).toString(),
             "defconfigs" to config.sourceDefconfigs.joinToString("\n"),
             "device_label" to config.sourceDeviceLabel,
-            "version_overrides" to buildVersionOverridesJson(config.osPatchLevel, config.sourceKernelVersionOverride),
+            "version_overrides" to buildVersionOverridesJson(config.osPatchLevel, config.sourceKernelVersionOverride, config.uploadToRelease),
             "kernelsu_variant" to config.kernelsuVariant,
             "kernelsu_branch" to config.kernelsuBranch,
             "custom_ref" to if (config.kernelsuBranch == KSU_BRANCH_CUSTOM) config.customRef else "",
@@ -6738,7 +6738,7 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
         "kernelsu_variant" to config.kernelsuVariant,
         "kernelsu_branch" to config.kernelsuBranch,
         "version" to config.version,
-        "build_time" to config.buildTime,
+        "extra_options" to buildExtraOptionsJson(config.buildTime, config.uploadToRelease),
         "use_zram" to config.useZram.toString(),
         "use_bbg" to config.useBbg.toString(),
         "use_ddk" to config.useDdk.toString(),
@@ -6746,7 +6746,6 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
         "use_networking" to config.useNetworking.toString(),
         "use_kpm" to config.useKpm.toString(),
         "use_rekernel" to config.useRekernel.toString(),
-        "upload_to_release" to config.uploadToRelease.toString(),
         "cancel_susfs" to config.cancelSusfs.toString(),
         "supp_op" to config.suppOp.toString(),
         "zram_full_algo" to config.zramFullAlgo.toString(),
@@ -6795,11 +6794,26 @@ private fun List<CustomExternalModule>?.toWorkflowInput(): String = this.orEmpty
 // kernel-source.yml 的 workflow_dispatch inputs 有 25 个上限；把 os_patch_level 与
 // kernel_version_override 两个"版本元数据覆盖"合并成一个 JSON input 以腾出槽位。
 // 工作流侧用 fromJSON(inputs.version_overrides).<key> 取回。
-private fun buildVersionOverridesJson(osPatchLevel: String, kernelVersionOverride: String): String =
+private fun buildVersionOverridesJson(
+    osPatchLevel: String,
+    kernelVersionOverride: String,
+    uploadToRelease: Boolean
+): String =
     Gson().toJson(
         mapOf(
             "os_patch_level" to osPatchLevel.trim().lowercase(),
             "kernel_version_override" to kernelVersionOverride,
+            "upload_to_release" to uploadToRelease,
+        )
+    )
+
+// kernel-custom.yml 已达 25 个 dispatch 输入上限：把 build_time 与 upload_to_release
+// 合并成一个 JSON input，工作流侧用 fromJSON(inputs.extra_options).<key> 取回。
+private fun buildExtraOptionsJson(buildTime: String, uploadToRelease: Boolean): String =
+    Gson().toJson(
+        mapOf(
+            "build_time" to buildTime,
+            "upload_to_release" to uploadToRelease,
         )
     )
 

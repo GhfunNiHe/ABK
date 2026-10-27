@@ -4399,9 +4399,12 @@ def _standard_build_inputs(
         "use_ntsync": str(bool(args.ntsync)).lower(),
         "use_networking": str(bool(args.networking)).lower(),
         "zram_full_algo": str(bool(args.zram_full_algo)).lower(),
-        # Empty means current UTC. Omitting this input selects the historical
-        # fixed timestamp in the workflow, unlike the Android App.
-        "build_time": args.build_time or "",
+        # Empty means current UTC. kernel-custom.yml 已达 25 个 workflow_dispatch
+        # 输入上限，故 build_time 与 upload_to_release 合并为一个 JSON input。
+        "extra_options": json.dumps(
+            {"build_time": args.build_time or "", "upload_to_release": False},
+            separators=(",", ":"),
+        ),
         "custom_kernel_options": getattr(args, "custom_kernel_options", ""),
     }
     if virtualization_support != "off":

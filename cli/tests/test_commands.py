@@ -533,7 +533,13 @@ class CommandBehaviorTests(unittest.TestCase):
             )
 
         self.assertEqual(0, result, output)
-        self.assertIn('"build_time": ""', output)
+        inputs_line = next(
+            line.strip().removeprefix("inputs=")
+            for line in output.splitlines()
+            if line.strip().startswith("inputs=")
+        )
+        inputs = json.loads(inputs_line)
+        self.assertEqual("", json.loads(inputs["extra_options"])["build_time"])
         self.assertIn(
             '"custom_kernel_options": "CONFIG_ALPHA=y\\n# CONFIG_BETA is not set"',
             output,

@@ -77,11 +77,11 @@ on:
         description: "自定义版本名 (可选)"
         required: false
         type: string
-      build_time:
-        description: "自定义构建时间 (可选，N或留空=当前UTC)"
+      extra_options:
+        description: "发布元数据（JSON）：build_time=自定义构建时间（N或留空=当前UTC）；upload_to_release=构建完成后上传产物到 GitHub Release（true/false）"
         required: false
         type: string
-        default: "Sun Dec 01 08:10:00 UTC 2024"
+        default: '{"build_time":"","upload_to_release":false}'
 
       # ==================== 虚拟化支持配置 ====================
       virtualization_support:
@@ -173,11 +173,6 @@ on:
         required: false
         type: string
         default: ""
-      upload_to_release:
-        description: "构建完成后将产物上传到 GitHub Release（自动生成标签）"
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   build-custom-kernel:
@@ -194,7 +189,7 @@ jobs:
       ksu_branch: ${{ inputs.kernelsu_branch }}
       custom_ref: ${{ inputs.custom_ref || '' }}
       version: ${{ inputs.version || '' }}
-      build_time: ${{ inputs.build_time || '' }}
+      build_time: ${{ fromJSON(inputs.extra_options).build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_ddk: ${{ inputs.use_ddk }}
@@ -210,7 +205,7 @@ jobs:
       kpm_password: ${{ inputs.kpm_password || '' }}
       custom_external_modules: ${{ inputs.custom_external_modules || '' }}
       custom_kernel_options: ${{ inputs.custom_kernel_options || '' }}
-      upload_to_release: ${{ inputs.upload_to_release || false }}
+      upload_to_release: ${{ fromJSON(inputs.extra_options).upload_to_release || false }}
 
   get-ksu-manager:
     uses: ./.github/workflows/get-manager.yml

@@ -23,8 +23,29 @@ class BuildPlanLogicTest {
 
     @Test
     fun workflowInputMapSerializesUploadToRelease() {
-        assertEquals("true", KernelBuildConfig(uploadToRelease = true).toInputMap()["upload_to_release"])
-        assertEquals("false", KernelBuildConfig().toInputMap()["upload_to_release"])
+        val gson = com.google.gson.Gson()
+        val disabled = gson.fromJson(
+            KernelBuildConfig().toInputMap()["extra_options"], Map::class.java
+        )
+        assertEquals(false, disabled["upload_to_release"])
+        val enabled = gson.fromJson(
+            KernelBuildConfig(buildTime = "N", uploadToRelease = true).toInputMap()["extra_options"],
+            Map::class.java
+        )
+        assertEquals(true, enabled["upload_to_release"])
+        assertEquals("N", enabled["build_time"])
+    }
+
+    @Test
+    fun customSourceOverridesCarryUploadToRelease() {
+        val inputs = KernelBuildConfig(
+            buildTarget = BUILD_TARGET_CUSTOM_SOURCE,
+            sourceUrl = "https://github.com/example/kernel.git",
+            sourceRef = "main",
+            uploadToRelease = true,
+        ).toInputMap()
+        val overrides = com.google.gson.Gson().fromJson(inputs["version_overrides"], Map::class.java)
+        assertEquals(true, overrides["upload_to_release"])
     }
 
     @Test

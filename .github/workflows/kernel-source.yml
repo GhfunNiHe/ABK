@@ -32,7 +32,7 @@ on:
         type: string
         default: ""
       version_overrides:
-        description: "版本元数据覆盖（JSON）：os_patch_level=AOSP manifest 补丁月份 YYYY-MM，或 lts 跟随对应 LTS 分支（必填）；kernel_version_override=内核版本 X.Y/X.Y.Z（留空=从源码 Makefile 自动检测）"
+        description: "版本元数据覆盖（JSON）：os_patch_level=AOSP manifest 补丁月份 YYYY-MM，或 lts 跟随对应 LTS 分支（必填）；kernel_version_override=内核版本 X.Y/X.Y.Z（留空=从源码 Makefile 自动检测）；upload_to_release=构建完成后上传产物到 GitHub Release（true/false）"
         required: true
         type: string
         default: '{"os_patch_level":"2025-09","kernel_version_override":""}'
@@ -282,3 +282,4 @@ jobs:
       kpm_password: ${{ inputs.kpm_password }}
       custom_external_modules: ${{ inputs.custom_external_modules }}
       custom_kernel_options: ${{ inputs.custom_kernel_options }}
+      upload_to_release: ${{ fromJSON(inputs.version_overrides).upload_to_release || false }}

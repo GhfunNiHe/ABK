@@ -224,13 +224,14 @@ class KernelSupportTest {
     }
 
     @Test
-    fun normalizeKeepsKpmForBakasuStableAndCustom() {
+    fun normalizeDisablesKpmAndSusfsForBakasuOnAllBranches() {
         val stable = KernelSupport.normalize(
             KernelBuildConfig(
                 kernelsuVariant = KSU_VARIANT_BAKASU,
                 kernelsuBranch = KSU_BRANCH_STABLE,
                 useKpm = true,
-                kpmPassword = "secret"
+                kpmPassword = "secret",
+                cancelSusfs = false
             )
         )
         val custom = KernelSupport.normalize(
@@ -238,14 +239,39 @@ class KernelSupportTest {
                 kernelsuVariant = KSU_VARIANT_BAKASU,
                 kernelsuBranch = KSU_BRANCH_CUSTOM,
                 useKpm = true,
-                kpmPassword = "secret"
+                kpmPassword = "secret",
+                cancelSusfs = false
             )
         )
 
-        assertTrue(stable.useKpm)
-        assertEquals("secret", stable.kpmPassword)
-        assertTrue(custom.useKpm)
-        assertEquals("secret", custom.kpmPassword)
+        assertFalse(stable.useKpm)
+        assertEquals("", stable.kpmPassword)
+        assertTrue(stable.cancelSusfs)
+        assertFalse(custom.useKpm)
+        assertEquals("", custom.kpmPassword)
+        assertTrue(custom.cancelSusfs)
+        assertFalse(KernelSupport.isKpmSupported(BUILD_TARGET_GKI, KSU_VARIANT_BAKASU, KSU_BRANCH_STABLE))
+        assertFalse(KernelSupport.isSusfsSelectable(KSU_VARIANT_BAKASU))
+    }
+
+    @Test
+    fun normalizeKeepsKpmAndSusfsForSukisu() {
+        val normalized = KernelSupport.normalize(
+            KernelBuildConfig(
+                kernelsuVariant = KSU_VARIANT_SUKISU,
+                kernelsuBranch = KSU_BRANCH_STABLE,
+                useKpm = true,
+                kpmPassword = "secret",
+                cancelSusfs = false
+            )
+        )
+
+        assertTrue(normalized.useKpm)
+        assertEquals("secret", normalized.kpmPassword)
+        assertFalse(normalized.cancelSusfs)
+        assertTrue(KernelSupport.isKpmSupported(BUILD_TARGET_GKI, KSU_VARIANT_SUKISU, KSU_BRANCH_STABLE))
+        assertTrue(KernelSupport.isSusfsSelectable(KSU_VARIANT_SUKISU))
+        assertTrue(KernelSupport.isSusfsSelectable(KSU_VARIANT_OFFICIAL))
     }
 
     @Test

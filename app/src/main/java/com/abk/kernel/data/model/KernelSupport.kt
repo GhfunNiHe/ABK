@@ -294,7 +294,7 @@ object KernelSupport {
             if (isOnePlus || ksuVariant == KSU_VARIANT_NONE) KSU_BRANCH_STABLE else config.kernelsuBranch
         )
         val onePlusIsMtk = onePlusCpu.startsWith("mt")
-        val onePlusKpmSupported = !onePlusIsMtk && ksuVariant in setOf(KSU_VARIANT_SUKISU, KSU_VARIANT_BAKASU)
+        val onePlusKpmSupported = !onePlusIsMtk && ksuVariant == KSU_VARIANT_SUKISU
         val gkiKpmSupported = isKpmSupported(BUILD_TARGET_GKI, ksuVariant, normalizedKsuBranch)
         val onePlusProxyAllowed = !onePlusIsMtk
         val onePlusSusfsEnabled = onePlusSusfsSupported(line.androidVersion, line.kernelVersion)
@@ -331,6 +331,7 @@ object KernelSupport {
             },
             cancelSusfs = when {
                 ksuVariant == KSU_VARIANT_NONE -> true
+                ksuVariant == KSU_VARIANT_BAKASU -> true
                 isOnePlus && !onePlusSusfsEnabled -> true
                 else -> config.cancelSusfs
             },
@@ -529,17 +530,11 @@ object KernelSupport {
     fun isKpmSupported(buildTarget: String, ksuVariant: String, ksuBranch: String): Boolean {
         val normalizedTarget = normalizeBuildTarget(buildTarget)
         val normalizedVariant = normalizeKsuVariant(ksuVariant, normalizedTarget)
-        val normalizedBranch = normalizeKsuBranch(ksuBranch)
-        return when {
-            normalizedVariant == KSU_VARIANT_NONE -> false
-            normalizedVariant == KSU_VARIANT_OFFICIAL -> false
-            normalizedTarget == BUILD_TARGET_ONEPLUS ->
-                normalizedVariant in setOf(KSU_VARIANT_SUKISU, KSU_VARIANT_BAKASU)
-            normalizedVariant == KSU_VARIANT_BAKASU &&
-                normalizedBranch !in setOf(KSU_BRANCH_STABLE, KSU_BRANCH_CUSTOM) -> false
-            else -> true
-        }
+        return normalizedVariant == KSU_VARIANT_SUKISU
     }
+
+    fun isSusfsSelectable(ksuVariant: String): Boolean =
+        normalizeKsuVariant(ksuVariant, BUILD_TARGET_GKI) != KSU_VARIANT_BAKASU
 
     fun virtualizationSupportOptions(kernelVersion: String): List<String> =
         if (kernelVersion == "6.12") listOf("off", "on") else listOf("off", "678", "123", "345")

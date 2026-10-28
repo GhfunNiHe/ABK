@@ -6720,7 +6720,8 @@ internal fun KernelBuildConfig.toInputMap(): Map<String, String> {
             "android_version" to config.androidVersion,
             "kernel_version" to config.kernelVersion,
             "ksu_variant" to config.kernelsuVariant,
-            "enable_susfs" to (!config.cancelSusfs && config.kernelsuVariant != KSU_VARIANT_NONE).toString(),
+            "enable_susfs" to (!config.cancelSusfs && config.kernelsuVariant != KSU_VARIANT_NONE &&
+                KernelSupport.isSusfsSelectable(config.kernelsuVariant)).toString(),
             "use_kpm" to config.useKpm.toString(),
             "use_lz4kd" to config.onePlusUseLz4kd.toString(),
             "use_bbg" to config.useBbg.toString(),

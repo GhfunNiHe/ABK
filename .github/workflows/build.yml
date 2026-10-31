@@ -6916,6 +6916,11 @@ jobs:
                   exit 1
                 fi
                 eval "$rust_env"
+                for rust_core in "$RUST_SYSROOT"/lib/rustlib/*-unknown-none/lib/libcore-*; do
+                  [ -e "$rust_core" ] || continue
+                  rm -f "$rust_core"
+                  echo "已移除 prebuilts sysroot 中的 $(basename "$rust_core")，避免与内核自建 core 冲突"
+                done
                 RUST_ACTION_ENV="--action_env=RUSTC --action_env=RUST_LIB_SRC --action_env=BINDGEN --action_env=LIBCLANG_PATH --action_env=LD_LIBRARY_PATH"
                 for kv in "BINDGEN=$BINDGEN" "RUST_LIB_SRC=$RUST_LIB_SRC" "RUSTC=$RUSTC" "LIBCLANG_PATH=$LIBCLANG_PATH" "RUST_PREBUILT_BIN=$RUST_PREBUILT_BIN"; do
                   key=${kv%%=*}

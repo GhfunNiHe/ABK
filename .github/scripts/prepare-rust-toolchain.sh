@@ -81,6 +81,7 @@ fi
 [ -d "$libclang" ] || { log "缺少 $libclang（prebuilts/clang 未同步或结构异常）"; exit 1; }
 
 printf 'export RUSTC=%q\n' "$rustc"
+printf 'export RUST_SYSROOT=%q\n' "$rust_dir"
 printf 'export RUST_PREBUILT_BIN=%q\n' "prebuilts/rust/linux-x86/$rustc_ver/bin"
 printf 'export RUST_LIB_SRC=%q\n' "$rust_lib_src"
 printf 'export BINDGEN=%q\n' "$bindgen"

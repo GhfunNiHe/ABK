@@ -1281,7 +1281,11 @@ jobs:
             done <<< "$SOURCE_DEFCONFIGS"
             if [ "$rust_requested" = "true" ]; then
               echo "源码 defconfig 启用了 CONFIG_RUST，准备 Rust 工具链以在配置合并阶段保留该选项"
-              eval "$(bash "$GITHUB_WORKSPACE/.github/scripts/prepare-rust-toolchain.sh")"
+              if ! rust_env="$(bash "$GITHUB_WORKSPACE/.github/scripts/prepare-rust-toolchain.sh")"; then
+                echo "::error::Rust 工具链准备失败，无法在配置合并阶段保留 CONFIG_RUST"
+                exit 1
+              fi
+              eval "$rust_env"
             fi
 
             python3 "$GITHUB_WORKSPACE/.github/scripts/custom-source.py" merge-defconfigs \
@@ -6906,23 +6910,20 @@ jobs:
                 RUST_ENABLED=true
               fi
               RUST_ACTION_ENV=""
-              RUST_FLAG=""
               if [ "$RUST_ENABLED" = "true" ]; then
-                eval "$(bash "$GITHUB_WORKSPACE/.github/scripts/prepare-rust-toolchain.sh")"
+                if ! rust_env="$(bash "$GITHUB_WORKSPACE/.github/scripts/prepare-rust-toolchain.sh")"; then
+                  echo "::error::Rust 工具链准备失败"
+                  exit 1
+                fi
+                eval "$rust_env"
                 RUST_ACTION_ENV="--action_env=RUSTC --action_env=RUST_LIB_SRC --action_env=BINDGEN --action_env=LIBCLANG_PATH --action_env=LD_LIBRARY_PATH"
-                for kv in "BINDGEN=$BINDGEN" "RUST_LIB_SRC=$RUST_LIB_SRC" "RUSTC=$RUSTC" "LIBCLANG_PATH=$LIBCLANG_PATH"; do
+                for kv in "BINDGEN=$BINDGEN" "RUST_LIB_SRC=$RUST_LIB_SRC" "RUSTC=$RUSTC" "LIBCLANG_PATH=$LIBCLANG_PATH" "RUST_PREBUILT_BIN=$RUST_PREBUILT_BIN"; do
                   key=${kv%%=*}
                   grep -q "^${key}=" common/build.config.common || echo "$kv" >> common/build.config.common
                 done
                 echo "RUSTC=$RUSTC"
                 echo "RUST_LIB_SRC=$RUST_LIB_SRC"
                 echo "BINDGEN=$BINDGEN"
-                if grep -q 'name = "rust"' build/kernel/kleaf/BUILD.bazel 2>/dev/null \
-                  && grep -A2 'bool_flag(' build/kernel/kleaf/BUILD.bazel 2>/dev/null | grep -q 'name = "rust"'; then
-                  RUST_FLAG="--//build/kernel/kleaf:rust"
-                else
-                  echo "::warning::当前 Kleaf 版本未提供 //build/kernel/kleaf:rust，仅依赖 defconfig 中的 CONFIG_RUST"
-                fi
               fi
               # 提取 gki_defconfig 修改到 fragment，避免 bazel trim 检查失败
               FRAG="common/arch/arm64/configs/ksu.fragment"
@@ -6941,7 +6942,7 @@ jobs:
               fi
               BAZEL_DISK_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/bazel-disk"
               mkdir -p "$BAZEL_DISK_CACHE"
-              tools/bazel build --disk_cache="$BAZEL_DISK_CACHE" --config=fast $LTO_FLAG $FRAG_FLAG $RUST_FLAG $RUST_ACTION_ENV //common:kernel_aarch64_dist || exit 1
+              tools/bazel build --disk_cache="$BAZEL_DISK_CACHE" --config=fast $LTO_FLAG $FRAG_FLAG $RUST_ACTION_ENV //common:kernel_aarch64_dist || exit 1
               strings ./bazel-bin/common/kernel_aarch64/Image | grep 'Linux version'
             fi
 

@@ -62,14 +62,26 @@ if [ ! -x "$rustc" ] || [ ! -d "$rust_lib_src" ]; then
 fi
 
 bindgen="$root/prebuilts/clang-tools/linux-x86/bin/bindgen"
-libclang="$root/prebuilts/clang/host/linux-x86/clang-$clang_ver/lib64"
+clang_root="$root/prebuilts/clang/host/linux-x86"
+libclang="$clang_root/clang-$clang_ver/lib64"
+if [ ! -d "$libclang" ]; then
+  fallback=""
+  for candidate in "$clang_root"/clang-*/lib64 "$clang_root"/clang-*/lib; do
+    [ -d "$candidate" ] && fallback="$candidate" && break
+  done
+  if [ -n "$fallback" ]; then
+    log "pin 的 clang-$clang_ver/lib64 缺失，改用 $fallback"
+    libclang="$fallback"
+  fi
+fi
 
 [ -x "$rustc" ] || { log "缺少 $rustc"; exit 1; }
 [ -d "$rust_lib_src" ] || { log "$rust_dir 缺少 rust-src"; exit 1; }
 [ -x "$bindgen" ] || { log "缺少 $bindgen"; exit 1; }
-[ -d "$libclang" ] || { log "缺少 $libclang"; exit 1; }
+[ -d "$libclang" ] || { log "缺少 $libclang（prebuilts/clang 未同步或结构异常）"; exit 1; }
 
 printf 'export RUSTC=%q\n' "$rustc"
+printf 'export RUST_PREBUILT_BIN=%q\n' "prebuilts/rust/linux-x86/$rustc_ver/bin"
 printf 'export RUST_LIB_SRC=%q\n' "$rust_lib_src"
 printf 'export BINDGEN=%q\n' "$bindgen"
 printf 'export LIBCLANG_PATH=%q\n' "$libclang"

@@ -6941,6 +6941,11 @@ jobs:
               if [ -s "$FRAG" ]; then
                 FRAG_FLAG="--defconfig_fragment=//common:arch/arm64/configs/ksu.fragment"
               fi
+              if [ -f common/BUILD.bazel ] && grep -q '_CODE002_MODULE_OUTS = \[' common/BUILD.bazel \
+                && ! grep -q '"net/netfilter/xt_sctp.ko"' common/BUILD.bazel; then
+                sed -i '/_CODE002_MODULE_OUTS = \[/a\    "net/netfilter/xt_sctp.ko",' common/BUILD.bazel
+                echo "已补充 _CODE002_MODULE_OUTS: net/netfilter/xt_sctp.ko"
+              fi
               LTO_FLAG="--lto=thin"
               if [ "${EFFECTIVE_MODERN_GKI:-false}" = "true" ] || [ "$RUST_ENABLED" = "true" ]; then
                 LTO_FLAG="--lto=none"

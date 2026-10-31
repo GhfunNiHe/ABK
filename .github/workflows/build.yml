@@ -6879,6 +6879,24 @@ jobs:
               LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang" || exit 1
               strings "out/${{ inputs.android_version }}-${{ inputs.kernel_version }}/dist/Image" | grep 'Linux version'
             else
+              RUSTC_VER=$(sed -n 's/^RUSTC_VERSION=//p' common/build.config.constants | head -n1 | tr -d '[:space:]')
+              [ -n "$RUSTC_VER" ] || { echo "RUSTC_VERSION missing in common/build.config.constants"; exit 1; }
+              RUST_DIR="$KERNEL_ROOT/prebuilts/rust/linux-x86/$RUSTC_VER"
+              BINDGEN_PATH="$KERNEL_ROOT/prebuilts/clang-tools/linux-x86/bin/bindgen"
+              CLANG_VER=$(sed -n 's/^CLANG_VERSION=//p' common/build.config.constants | head -n1 | tr -d '[:space:]')
+              LIBCLANG_DIR="$KERNEL_ROOT/prebuilts/clang/host/linux-x86/clang-$CLANG_VER/lib64"
+              [ -x "$RUST_DIR/bin/rustc" ] || { echo "missing $RUST_DIR/bin/rustc"; exit 1; }
+              [ -d "$RUST_DIR/lib/rustlib/src/rust/library" ] || { echo "missing rust-src in $RUST_DIR"; exit 1; }
+              [ -x "$BINDGEN_PATH" ] || { echo "missing $BINDGEN_PATH"; exit 1; }
+              export RUSTC="$RUST_DIR/bin/rustc"
+              export RUST_LIB_SRC="$RUST_DIR/lib/rustlib/src/rust/library"
+              export BINDGEN="$BINDGEN_PATH"
+              export LIBCLANG_PATH="$LIBCLANG_DIR"
+              export LD_LIBRARY_PATH="$LIBCLANG_DIR:${LD_LIBRARY_PATH:-}"
+              RUST_ACTION_ENV="--action_env=RUSTC --action_env=RUST_LIB_SRC --action_env=BINDGEN --action_env=LIBCLANG_PATH --action_env=LD_LIBRARY_PATH"
+              echo "RUSTC=$RUSTC"
+              echo "RUST_LIB_SRC=$RUST_LIB_SRC"
+              echo "BINDGEN=$BINDGEN"
               # 提取 gki_defconfig 修改到 fragment，避免 bazel trim 检查失败
               FRAG="common/arch/arm64/configs/ksu.fragment"
               diff "$DEFCONFIG.orig" "$DEFCONFIG" | grep '^>' | sed 's/^> //; s/^[[:space:]]*//' > "$FRAG" || true
@@ -6896,7 +6914,7 @@ jobs:
               fi
               BAZEL_DISK_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/bazel-disk"
               mkdir -p "$BAZEL_DISK_CACHE"
-              tools/bazel build --disk_cache="$BAZEL_DISK_CACHE" --config=fast $LTO_FLAG $FRAG_FLAG //common:kernel_aarch64_dist || exit 1
+              tools/bazel build --disk_cache="$BAZEL_DISK_CACHE" --config=fast $LTO_FLAG $FRAG_FLAG $RUST_ACTION_ENV //common:kernel_aarch64_dist || exit 1
               strings ./bazel-bin/common/kernel_aarch64/Image | grep 'Linux version'
             fi
 

@@ -1270,10 +1270,32 @@ jobs:
               --kernel-version-override "$KERNEL_VERSION_OVERRIDE" \
               --github-output "$GITHUB_OUTPUT"
 
+            rust_requested=false
+            while IFS= read -r defconfig_entry; do
+              [ -n "$defconfig_entry" ] || continue
+              defconfig_path="common/arch/arm64/configs/$defconfig_entry"
+              if [ -f "$defconfig_path" ] && grep -q '^CONFIG_RUST=y' "$defconfig_path"; then
+                rust_requested=true
+                break
+              fi
+            done <<< "$SOURCE_DEFCONFIGS"
+            if [ "$rust_requested" = "true" ]; then
+              echo "源码 defconfig 启用了 CONFIG_RUST，准备 Rust 工具链以在配置合并阶段保留该选项"
+              eval "$(bash "$GITHUB_WORKSPACE/.github/scripts/prepare-rust-toolchain.sh")"
+            fi
+
             python3 "$GITHUB_WORKSPACE/.github/scripts/custom-source.py" merge-defconfigs \
               --source-dir common \
               --defconfigs "$SOURCE_DEFCONFIGS" \
               --output "$DEFCONFIG"
+
+            if [ "$rust_requested" = "true" ]; then
+              if grep -q '^CONFIG_RUST=y' "$DEFCONFIG"; then
+                echo "配置合并后 CONFIG_RUST=y 已保留"
+              else
+                echo "::warning::源码请求 CONFIG_RUST，但配置合并后未保留；请检查 rustc/bindgen 版本与 Kconfig 依赖"
+              fi
+            fi
 
             echo "ABK_SOURCE_MODE=custom_git" >> "$GITHUB_ENV"
             echo "ABK_CUSTOM_SOURCE_ROOT=$KERNEL_ROOT/common" >> "$GITHUB_ENV"
@@ -6879,51 +6901,29 @@ jobs:
               LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang" || exit 1
               strings "out/${{ inputs.android_version }}-${{ inputs.kernel_version }}/dist/Image" | grep 'Linux version'
             else
-              RUSTC_VER=$(sed -n 's/^RUSTC_VERSION=//p' common/build.config.constants | head -n1 | tr -d '[:space:]')
-              [ -n "$RUSTC_VER" ] || { echo "RUSTC_VERSION missing in common/build.config.constants"; exit 1; }
-              RUST_DIR="$KERNEL_ROOT/prebuilts/rust/linux-x86/$RUSTC_VER"
-              if [ ! -d "$RUST_DIR" ]; then
-                TMP_RUST=$(mktemp -d)
-                if ! git clone --depth 1 --filter=blob:none --sparse --branch rust-1.82-release                     https://android.googlesource.com/platform/prebuilts/rust "$TMP_RUST"; then
-                  echo "failed to clone prebuilts/rust" >&2
-                  rm -rf "$TMP_RUST"
-                  exit 1
-                fi
-                AVAIL=$(git -C "$TMP_RUST" ls-tree --name-only HEAD linux-x86/ | sed 's#^linux-x86/##; s#/$##' | grep -E '^[0-9]' | sort -V || true)
-                SRC="$RUSTC_VER"
-                if ! printf '%s\n' "$AVAIL" | grep -qx "$SRC"; then
-                  BASE="${RUSTC_VER%.*}"
-                  SRC=$(printf '%s\n' "$AVAIL" | awk -F. -v b="$BASE" '$1"."$2 == b' | sort -V | tail -n1 || true)
-                fi
-                if [ -z "$SRC" ]; then
-                  echo "no matching rust prebuilt for $RUSTC_VER" >&2
-                  rm -rf "$TMP_RUST"
-                  exit 1
-                fi
-                git -C "$TMP_RUST" sparse-checkout set "linux-x86/$SRC"
-                cp -a "$TMP_RUST/linux-x86/$SRC" "$RUST_DIR"
-                rm -rf "$TMP_RUST"
-                echo "installed rust $SRC as $RUST_DIR"
+              RUST_ENABLED=false
+              if grep -q '^CONFIG_RUST=y' "$DEFCONFIG"; then
+                RUST_ENABLED=true
               fi
-              BINDGEN_PATH="$KERNEL_ROOT/prebuilts/clang-tools/linux-x86/bin/bindgen"
-              CLANG_VER=$(sed -n 's/^CLANG_VERSION=//p' common/build.config.constants | head -n1 | tr -d '[:space:]')
-              LIBCLANG_DIR="$KERNEL_ROOT/prebuilts/clang/host/linux-x86/clang-$CLANG_VER/lib64"
-              [ -x "$RUST_DIR/bin/rustc" ] || { echo "missing $RUST_DIR/bin/rustc"; exit 1; }
-              [ -d "$RUST_DIR/lib/rustlib/src/rust/library" ] || { echo "missing rust-src in $RUST_DIR"; exit 1; }
-              [ -x "$BINDGEN_PATH" ] || { echo "missing $BINDGEN_PATH"; exit 1; }
-              export RUSTC="$RUST_DIR/bin/rustc"
-              export RUST_LIB_SRC="$RUST_DIR/lib/rustlib/src/rust/library"
-              export BINDGEN="$BINDGEN_PATH"
-              export LIBCLANG_PATH="$LIBCLANG_DIR"
-              export LD_LIBRARY_PATH="$LIBCLANG_DIR:${LD_LIBRARY_PATH:-}"
-              RUST_ACTION_ENV="--action_env=RUSTC --action_env=RUST_LIB_SRC --action_env=BINDGEN --action_env=LIBCLANG_PATH --action_env=LD_LIBRARY_PATH"
-              for kv in "BINDGEN=$BINDGEN" "RUST_LIB_SRC=$RUST_LIB_SRC" "RUSTC=$RUSTC" "LIBCLANG_PATH=$LIBCLANG_PATH"; do
-                key=${kv%%=*}
-                grep -q "^${key}=" common/build.config.common || echo "$kv" >> common/build.config.common
-              done
-              echo "RUSTC=$RUSTC"
-              echo "RUST_LIB_SRC=$RUST_LIB_SRC"
-              echo "BINDGEN=$BINDGEN"
+              RUST_ACTION_ENV=""
+              RUST_FLAG=""
+              if [ "$RUST_ENABLED" = "true" ]; then
+                eval "$(bash "$GITHUB_WORKSPACE/.github/scripts/prepare-rust-toolchain.sh")"
+                RUST_ACTION_ENV="--action_env=RUSTC --action_env=RUST_LIB_SRC --action_env=BINDGEN --action_env=LIBCLANG_PATH --action_env=LD_LIBRARY_PATH"
+                for kv in "BINDGEN=$BINDGEN" "RUST_LIB_SRC=$RUST_LIB_SRC" "RUSTC=$RUSTC" "LIBCLANG_PATH=$LIBCLANG_PATH"; do
+                  key=${kv%%=*}
+                  grep -q "^${key}=" common/build.config.common || echo "$kv" >> common/build.config.common
+                done
+                echo "RUSTC=$RUSTC"
+                echo "RUST_LIB_SRC=$RUST_LIB_SRC"
+                echo "BINDGEN=$BINDGEN"
+                if grep -q 'name = "rust"' build/kernel/kleaf/BUILD.bazel 2>/dev/null \
+                  && grep -A2 'bool_flag(' build/kernel/kleaf/BUILD.bazel 2>/dev/null | grep -q 'name = "rust"'; then
+                  RUST_FLAG="--//build/kernel/kleaf:rust"
+                else
+                  echo "::warning::当前 Kleaf 版本未提供 //build/kernel/kleaf:rust，仅依赖 defconfig 中的 CONFIG_RUST"
+                fi
+              fi
               # 提取 gki_defconfig 修改到 fragment，避免 bazel trim 检查失败
               FRAG="common/arch/arm64/configs/ksu.fragment"
               diff "$DEFCONFIG.orig" "$DEFCONFIG" | grep '^>' | sed 's/^> //; s/^[[:space:]]*//' > "$FRAG" || true
@@ -6936,12 +6936,12 @@ jobs:
                 FRAG_FLAG="--defconfig_fragment=//common:arch/arm64/configs/ksu.fragment"
               fi
               LTO_FLAG="--lto=thin"
-              if [ "${EFFECTIVE_MODERN_GKI:-false}" = "true" ]; then
+              if [ "${EFFECTIVE_MODERN_GKI:-false}" = "true" ] || [ "$RUST_ENABLED" = "true" ]; then
                 LTO_FLAG="--lto=none"
               fi
               BAZEL_DISK_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/bazel-disk"
               mkdir -p "$BAZEL_DISK_CACHE"
-              tools/bazel build --disk_cache="$BAZEL_DISK_CACHE" --config=fast $LTO_FLAG $FRAG_FLAG $RUST_ACTION_ENV //common:kernel_aarch64_dist || exit 1
+              tools/bazel build --disk_cache="$BAZEL_DISK_CACHE" --config=fast $LTO_FLAG $FRAG_FLAG $RUST_FLAG $RUST_ACTION_ENV //common:kernel_aarch64_dist || exit 1
               strings ./bazel-bin/common/kernel_aarch64/Image | grep 'Linux version'
             fi
 

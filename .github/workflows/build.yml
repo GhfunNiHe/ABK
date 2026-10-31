@@ -6882,6 +6882,29 @@ jobs:
               RUSTC_VER=$(sed -n 's/^RUSTC_VERSION=//p' common/build.config.constants | head -n1 | tr -d '[:space:]')
               [ -n "$RUSTC_VER" ] || { echo "RUSTC_VERSION missing in common/build.config.constants"; exit 1; }
               RUST_DIR="$KERNEL_ROOT/prebuilts/rust/linux-x86/$RUSTC_VER"
+              if [ ! -d "$RUST_DIR" ]; then
+                TMP_RUST=$(mktemp -d)
+                if ! git clone --depth 1 --filter=blob:none --sparse --branch rust-1.82-release                     https://android.googlesource.com/platform/prebuilts/rust "$TMP_RUST"; then
+                  echo "failed to clone prebuilts/rust" >&2
+                  rm -rf "$TMP_RUST"
+                  exit 1
+                fi
+                AVAIL=$(git -C "$TMP_RUST" ls-tree --name-only HEAD linux-x86/ | sed 's#^linux-x86/##; s#/$##' | grep -E '^[0-9]' | sort -V || true)
+                SRC="$RUSTC_VER"
+                if ! printf '%s\n' "$AVAIL" | grep -qx "$SRC"; then
+                  BASE="${RUSTC_VER%.*}"
+                  SRC=$(printf '%s\n' "$AVAIL" | awk -F. -v b="$BASE" '$1"."$2 == b' | sort -V | tail -n1 || true)
+                fi
+                if [ -z "$SRC" ]; then
+                  echo "no matching rust prebuilt for $RUSTC_VER" >&2
+                  rm -rf "$TMP_RUST"
+                  exit 1
+                fi
+                git -C "$TMP_RUST" sparse-checkout set "linux-x86/$SRC"
+                cp -a "$TMP_RUST/linux-x86/$SRC" "$RUST_DIR"
+                rm -rf "$TMP_RUST"
+                echo "installed rust $SRC as $RUST_DIR"
+              fi
               BINDGEN_PATH="$KERNEL_ROOT/prebuilts/clang-tools/linux-x86/bin/bindgen"
               CLANG_VER=$(sed -n 's/^CLANG_VERSION=//p' common/build.config.constants | head -n1 | tr -d '[:space:]')
               LIBCLANG_DIR="$KERNEL_ROOT/prebuilts/clang/host/linux-x86/clang-$CLANG_VER/lib64"

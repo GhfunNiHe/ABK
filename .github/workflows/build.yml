@@ -6917,6 +6917,10 @@ jobs:
               export LIBCLANG_PATH="$LIBCLANG_DIR"
               export LD_LIBRARY_PATH="$LIBCLANG_DIR:${LD_LIBRARY_PATH:-}"
               RUST_ACTION_ENV="--action_env=RUSTC --action_env=RUST_LIB_SRC --action_env=BINDGEN --action_env=LIBCLANG_PATH --action_env=LD_LIBRARY_PATH"
+              for kv in "BINDGEN=$BINDGEN" "RUST_LIB_SRC=$RUST_LIB_SRC" "RUSTC=$RUSTC" "LIBCLANG_PATH=$LIBCLANG_PATH"; do
+                key=${kv%%=*}
+                grep -q "^${key}=" common/build.config.common || echo "$kv" >> common/build.config.common
+              done
               echo "RUSTC=$RUSTC"
               echo "RUST_LIB_SRC=$RUST_LIB_SRC"
               echo "BINDGEN=$BINDGEN"

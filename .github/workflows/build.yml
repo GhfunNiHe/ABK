@@ -6946,6 +6946,10 @@ jobs:
                 sed -i '/_CODE002_MODULE_OUTS = \[/a\    "net/netfilter/xt_sctp.ko",' common/BUILD.bazel
                 echo "已补充 _CODE002_MODULE_OUTS: net/netfilter/xt_sctp.ko"
               fi
+              if [ -f common/BUILD.bazel ] && grep -q 'kmi_symbol_list_strict_mode": True' common/BUILD.bazel; then
+                sed -i 's/"kmi_symbol_list_strict_mode": True/"kmi_symbol_list_strict_mode": False/g' common/BUILD.bazel
+                echo "已关闭 KMI 符号严格模式检查（自定义源裁剪了部分 KMI 符号）"
+              fi
               LTO_FLAG="--lto=thin"
               if [ "${EFFECTIVE_MODERN_GKI:-false}" = "true" ] || [ "$RUST_ENABLED" = "true" ]; then
                 LTO_FLAG="--lto=none"

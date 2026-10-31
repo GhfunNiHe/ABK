@@ -21,7 +21,7 @@ DEFAULT_VARIANTS = ("Official", "SukiSU", "BakaSU")
 
 # (android_version, kernel_version, sub_level, os_patch_level, revision)
 # android12/5.10 必须带 revision（与 kernel-a12-5-10.yml matrix 相同取值）；
-# X/lts 只在自动构建矩阵启用的内核线出现（android16 未启用，故不列出）。
+# X/lts 只在自动构建矩阵启用的内核线出现（android16/android17 均未启用，故不列出）。
 CANDIDATES: tuple[tuple[str, str, str, str, str], ...] = (
     ("android12", "5.10", "66", "2022-01", "r11"),
     ("android12", "5.10", "81", "2022-03", "r11"),
@@ -104,6 +104,9 @@ CANDIDATES: tuple[tuple[str, str, str, str, str], ...] = (
     ("android16", "6.12", "23", "2025-06", ""),
     ("android16", "6.12", "38", "2025-09", ""),
     ("android16", "6.12", "58", "2025-12", ""),
+    ("android17", "6.18", "20", "2026-04", ""),
+    ("android17", "6.18", "21", "2026-06", ""),
+    ("android17", "6.18", "32", "2026-09", ""),
 )
 
 
@@ -133,6 +136,13 @@ def parse_fixed_combo(line: str) -> dict[str, str]:
 
 
 def main() -> None:
+    # Windows runner 的 stdout/stderr 默认按控制台 ANSI 代码页（如 cp936）
+    # 编码，中文消息会被 backslashreplace 成 \uXXXX 转义；强制 UTF-8，
+    # 保证任何平台上错误消息与 JSON 输出一致。
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", required=True, help="随机种子（PR 号 + head SHA + run_id）")
     parser.add_argument("--count-min", type=int, default=3, help="最小抽取数量")

@@ -442,6 +442,7 @@ object RootUtils {
             "6.1" -> "android14"
             "6.6" -> "android15"
             "6.12" -> "android16"
+            "6.18" -> "android17"
             else -> return null
         }
         return "$android-$kernel"

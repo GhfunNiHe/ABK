@@ -22,8 +22,9 @@ KERNEL_MATRIX_WORKFLOWS = {
     "android14": ("6.1", ROOT / ".github" / "workflows" / "kernel-a14-6-1.yml"),
     "android15": ("6.6", ROOT / ".github" / "workflows" / "kernel-a15-6-6.yml"),
     "android16": ("6.12", ROOT / ".github" / "workflows" / "kernel-a16-6-12.yml"),
+    "android17": ("6.18", ROOT / ".github" / "workflows" / "kernel-a17-6-18.yml"),
 }
-VALID_COMBOS = {"android12", "android13", "android14", "android15", "android16"}
+VALID_COMBOS = {"android12", "android13", "android14", "android15", "android16", "android17"}
 
 
 def load_sampler():
@@ -216,6 +217,9 @@ class SamplerBehaviorTests(unittest.TestCase):
             ],
             capture_output=True,
             text=True,
+            # Windows 子进程管道默认按 ANSI 代码页（cp936）解码；脚本已
+            # reconfigure UTF-8，这里显式按 UTF-8 解码，任何平台一致。
+            encoding="utf-8",
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("候选池", result.stderr)
@@ -225,6 +229,26 @@ class WorkflowDefinitionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+    def test_caller_permissions_cover_build_workflow(self):
+        # build.yml 顶层声明 contents: write / actions: write；调用方权限
+        # 低于被调用方会让 GitHub 在启动阶段直接拒绝（startup_failure）。
+        permissions = self.workflow.split("permissions:", 1)[1].split("on:", 1)[0]
+        self.assertIn("contents: write", permissions)
+        self.assertIn("actions: write", permissions)
+
+    def test_matrix_output_only_contains_include(self):
+        # matrix 轴只允许 include（数组）；count/seed/source 混入
+        # fromJSON(matrix) 会导致 strategy 评估失败，build job 全部跳过。
+        sample_job = self.workflow.split("  sample:", 1)[1].split("  build:", 1)[0]
+        matrix_line = next(
+            line for line in sample_job.splitlines() if 'echo "matrix=' in line
+        )
+        self.assertIn("{include: .include}", matrix_line)
+        count_line = next(
+            line for line in sample_job.splitlines() if 'echo "count=' in line
+        )
+        self.assertIn(".count", count_line)
 
     def test_build_job_disables_all_feature_flags(self):
         build_job = self.workflow.split("  build:", 1)[1].split("  result:", 1)[0]

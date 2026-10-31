@@ -1808,13 +1808,19 @@ fun BuildScreen(
                     }
                 } else {
                     val susfsSelectable = KernelSupport.isSusfsSelectable(config.kernelsuVariant)
-                    SwitchRow(stringResource(R.string.build_enable_susfs), !config.cancelSusfs, enabled = !noRootScheme && susfsSelectable) {
+                    val bbgSupported = KernelSupport.bbgSupported(config.androidVersion, config.kernelVersion)
+                    val suppOpSupported = KernelSupport.suppOpSupported(config.androidVersion, config.kernelVersion)
+                    SwitchRow(
+                        stringResource(R.string.build_enable_susfs),
+                        !config.cancelSusfs,
+                        enabled = !noRootScheme && susfsSelectable
+                    ) {
                         vm.updateBuildConfig(KernelSupport.normalize(config.copy(cancelSusfs = !it)))
                     }
                     SwitchRow(stringResource(R.string.build_enable_zram), config.useZram) {
                         vm.updateBuildConfig(config.copy(useZram = it))
                     }
-                    SwitchRow(stringResource(R.string.build_enable_bbg), config.useBbg) {
+                    SwitchRow(stringResource(R.string.build_enable_bbg), config.useBbg && bbgSupported, enabled = bbgSupported) {
                         vm.updateBuildConfig(config.copy(useBbg = it))
                     }
                     SwitchRow(stringResource(R.string.build_enable_ddk), config.useDdk) {
@@ -1838,7 +1844,7 @@ fun BuildScreen(
                         options = virtualizationSupportOptions,
                         onSelect = { vm.updateBuildConfig(config.copy(virtualizationSupport = it)) }
                     )
-                    SwitchRow(stringResource(R.string.build_enable_oneplus_8e), config.suppOp) {
+                    SwitchRow(stringResource(R.string.build_enable_oneplus_8e), config.suppOp && suppOpSupported, enabled = suppOpSupported) {
                         vm.updateBuildConfig(config.copy(suppOp = it))
                     }
                     SwitchRow(stringResource(R.string.build_upload_to_release), config.uploadToRelease) {

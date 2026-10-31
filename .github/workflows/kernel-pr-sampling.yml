@@ -15,8 +15,12 @@
 name: PR 内核抽样编译检查
 
 permissions:
-  contents: read
-  actions: read
+  # build.yml（被复用的工作流）声明了 contents: write / actions: write，
+  # 调用方权限必须 >= 被调用方，否则 GitHub 在启动阶段直接拒绝
+  # （startup_failure: "requesting 'actions: write, contents: write',
+  # but is only allowed 'actions: read, contents: read'"）。
+  contents: write
+  actions: write
 
 on:
   pull_request:
@@ -28,6 +32,7 @@ on:
       - ".github/workflows/kernel-a14-6-1.yml"
       - ".github/workflows/kernel-a15-6-6.yml"
       - ".github/workflows/kernel-a16-6-12.yml"
+      - ".github/workflows/kernel-a17-6-18.yml"
       - ".github/workflows/kernel-custom.yml"
       - ".github/workflows/kernel-source.yml"
       - ".github/workflows/kernel-full-feature-matrix.yml"
@@ -96,7 +101,10 @@ jobs:
           python3 .github/scripts/sample-kernel-versions.py "${args[@]}" --output sample.json
 
           {
-            echo "matrix=$(jq -c . sample.json)"
+            # matrix 轴只允许 include（数组）；count/seed/source 是标量，
+            # 混入 fromJSON(matrix) 会导致 strategy 评估失败（startup 报
+            # "unexpected value" 并跳过整个 build job）。
+            echo "matrix=$(jq -c '{include: .include}' sample.json)"
             echo "count=$(jq -r '.count' sample.json)"
           } >> "$GITHUB_OUTPUT"
 

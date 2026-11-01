@@ -6951,6 +6951,12 @@ jobs:
                 sed -i '0,/"kernel_aarch64": {/s//"kernel_aarch64": {\n        "kmi_symbol_list_strict_mode": False,/' common/BUILD.bazel
                 echo "已为 kernel_aarch64 显式关闭 KMI 符号严格模式检查"
               fi
+              if [ -f common/fs/notify/fdinfo.c ] \
+                && grep -q 'fanotify_fdinfo(struct seq_file \*m, struct fsnotify_mark \*mark)$' common/fs/notify/fdinfo.c \
+                && ! grep -q 'fanotify_fdinfo(struct seq_file \*m, struct fsnotify_mark \*mark, struct file \*file)' common/fs/notify/fdinfo.c; then
+                perl -0pi -e 's/static void fanotify_fdinfo\(struct seq_file \*m, struct fsnotify_mark \*mark\)\n/#if defined(CONFIG_KSU_SUSFS_SUS_MOUNT) || defined(CONFIG_KSU_SUSFS_SUS_KSTAT)\nstatic void fanotify_fdinfo(struct seq_file *m, struct fsnotify_mark *mark, struct file *file)\n#else\nstatic void fanotify_fdinfo(struct seq_file *m, struct fsnotify_mark *mark)\n#endif\n/' common/fs/notify/fdinfo.c
+                echo "已修复 fanotify_fdinfo 在启用 SUSFS 时的回调签名"
+              fi
               LTO_FLAG="--lto=thin"
               if [ "${EFFECTIVE_MODERN_GKI:-false}" = "true" ] || [ "$RUST_ENABLED" = "true" ]; then
                 LTO_FLAG="--lto=none"

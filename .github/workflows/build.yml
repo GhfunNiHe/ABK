@@ -1648,7 +1648,6 @@ jobs:
 
               final_text = path.read_text()
               required = (
-                  "struct selinux_state fake_state;",
                   "DEFINE_STATIC_KEY_FALSE(fake_status_initialize_key);",
                   "struct page *fake_status = NULL;",
                   "bool ksu_selinux_hide_enabled __read_mostly",
@@ -1657,6 +1656,8 @@ jobs:
                   "int security_context_to_sid_with_policy(",
                   "int security_sid_to_context_with_policy(",
               )
+              if "struct selinux_state fake_state" in original:
+                  required += ("struct selinux_state fake_state;",)
               missing = [marker for marker in required if marker not in final_text]
               if missing:
                   raise SystemExit(f"{path} missing BakaSU SELinux compatibility markers: {missing}")

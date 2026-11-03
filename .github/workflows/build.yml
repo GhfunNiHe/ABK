@@ -6957,6 +6957,13 @@ jobs:
                 perl -0pi -e 's/static void fanotify_fdinfo\(struct seq_file \*m, struct fsnotify_mark \*mark\)\n/#if defined(CONFIG_KSU_SUSFS_SUS_MOUNT) || defined(CONFIG_KSU_SUSFS_SUS_KSTAT)\nstatic void fanotify_fdinfo(struct seq_file *m, struct fsnotify_mark *mark, struct file *file)\n#else\nstatic void fanotify_fdinfo(struct seq_file *m, struct fsnotify_mark *mark)\n#endif\n/' common/fs/notify/fdinfo.c
                 echo "已修复 fanotify_fdinfo 在启用 SUSFS 时的回调签名"
               fi
+              if [ -f common/fs/susfs.c ]; then
+                sed -i 's/^static struct cred \*susfs_switch_to_ksu_domain(void)/static __maybe_unused struct cred *susfs_switch_to_ksu_domain(void)/' common/fs/susfs.c
+                sed -i 's/^static void susfs_restore_creds(struct cred \*orig_cred)/static __maybe_unused void susfs_restore_creds(struct cred *orig_cred)/' common/fs/susfs.c
+                if grep -q '__maybe_unused struct cred \*susfs_switch_to_ksu_domain' common/fs/susfs.c; then
+                  echo "已标记 SUSFS 未使用函数为 __maybe_unused（LTO 构建开启 -Werror=unused-function）"
+                fi
+              fi
               LTO_FLAG="--lto=thin"
               if [ "${EFFECTIVE_MODERN_GKI:-false}" = "true" ]; then
                 LTO_FLAG="--lto=none"

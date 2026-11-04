@@ -6965,7 +6965,7 @@ jobs:
                 fi
               fi
               LTO_FLAG="--lto=thin"
-              if [ "${EFFECTIVE_MODERN_GKI:-false}" = "true" ]; then
+              if [ "${EFFECTIVE_MODERN_GKI:-false}" = "true" ] || [ "$RUST_ENABLED" = "true" ]; then
                 LTO_FLAG="--lto=none"
               fi
               BAZEL_DISK_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/bazel-disk"
